@@ -2,24 +2,24 @@
 
 import cv2
 import pickle
-import argparse
+from classiqa.utils import extract_test_args
 from pathlib import Path
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-d", "--use_dataset", type=str,
-                        help="Dataset used to train the SVR model")
-    args = parser.parse_args()
+    args = extract_test_args()
 
     path_image_original = Path("images/test_image_orig.jpg")
     path_image_distorted = Path("images/test_image_dist.jpg")
-    path_model = Path("models/{}/{}_sseq.pkl".format(args.use_dataset, args.use_dataset))
-    with open(path_model, "rb") as f:
+
+    dset_name = args.use_dataset
+    path_model = Path(args.path_models) / args.model / args.use_dataset
+    path_model_file = path_model / f"{args.use_dataset}_{args.model}.pkl"
+    with open(path_model_file, "rb") as f:
         estimator = pickle.load(f)
 
     img_original = cv2.imread(str(path_image_original))
     img_distorted = cv2.imread(str(path_image_distorted))
-    score_original = estimator(img_original)[0]
-    score_distorted = estimator(img_distorted)[0]
-    print("Original: {:.5f}, Distorted: {:.5f}".format(score_original, score_distorted))
+    score_orig = estimator(img_original)[0]
+    score_dist = estimator(img_distorted)[0]
+    print(f"Original: {score_orig:.5f}, Distorted: {score_dist:.5f}")
