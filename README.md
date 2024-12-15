@@ -4,11 +4,11 @@ This repository is a collection of classical IQA methods long forgotten in favou
 
 ## Implemented methods
 
-- [SSEQ](#sseq)
-- [HOSA](#hosa)
-- [LFA](#lfa)
+- [SSEQ](#spatial-spectral-entropy-based-quality-sseq-index)
+- [HOSA](#high-orderd-statistics-aggregation-hosa)
+- [LFA](#local-feature-aggregation-lfa)
 
-### Spatial-Spectral Entropy-based Quality (SSEQ) index {#sseq}
+### Spatial-Spectral Entropy-based Quality (SSEQ) index
 
 This is my implementation of the **SSEQ index**. I wasn't able to find a fully implemented Python version of this index, so I decided to use [Aca4peop's code](https://github.com/Aca4peop/SSEQ-Python) as a starting point and then add my own modifications.
 
@@ -17,7 +17,7 @@ The full details of SSEQ can be found in the paper: [No-reference image quality 
 - Patch spatial entropy
 - DCT for spectral entropy (more info [here](https://eng.libretexts.org/Bookshelves/Electrical_Engineering/Signal_Processing_and_Modeling/Information_and_Entropy_(Penfield)/03%3A_Compression/3.08%3A_Detail-_2-D_Discrete_Cosine_Transformation/3.8.02%3A_Discrete_Cosine_Transformation))
 
-### High Orderd Statistics Aggregation (HOSA) {#hosa}
+### High Orderd Statistics Aggregation (HOSA)
 
 I implemented HOSA according to [Blind Image Quality Assessment Based on High
 Order Statistics Aggregation (Xu et al.)](https://ieeexplore.ieee.org/document/7501619). However, there were a couple of points in the paper that were not very clear, so I had to make some decisions:
@@ -25,7 +25,7 @@ Order Statistics Aggregation (Xu et al.)](https://ieeexplore.ieee.org/document/7
 - The construction of the visual codebook is memory-hungry, and probably not meant to be done with a laptop. Each local feature corresponds to a BxB patch, which results in (HxW)/(BxB) patches, and that can take a lot of RAM if you are using a large image dataset. For example, if we resized the images from KonIQ-10k to make them 512x382, each image would produce 3942 local features, which would result in more than 39M features for the whole dataset! Imagine if we used the original image size...
 - Related to my first point, it's not clear whether the images undergo any resizing or if HOSA was designed to work for all image sizes. To make it comparable to other IQA measures I implement, I'm resizing the images to 512px prior to feature extraction.
 
-### Local Feature Aggregation (LFA) {#lfa}
+### Local Feature Aggregation (LFA)
 
 One year before HOSA, the same authors presented LFA in [Local Feature Aggregation for Blind Image Quality
 Assessment (Xu et al. 2015)](https://ieeexplore.ieee.org/abstract/document/7457832), which can be considered the precursor of HOSA. As it follows a similar approach (generating a codebook and computing some metrics with each cluster's assignments), I've also implemented it.
