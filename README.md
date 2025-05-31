@@ -7,6 +7,7 @@ This repository is a collection of classical IQA methods long forgotten in favou
 - [SSEQ](#spatial-spectral-entropy-based-quality-sseq-index)
 - [HOSA](#high-orderd-statistics-aggregation-hosa)
 - [LFA](#local-feature-aggregation-lfa)
+- [GM-LOG](#gradient-magnitude-and-laplacian-features-gm-log)
 
 ### Spatial-Spectral Entropy-based Quality (SSEQ) index
 
