@@ -1,9 +1,10 @@
 import argparse
 from classiqa.data import dataset_names
 from classiqa.sseq import SSEQ
+from classiqa.gmlog import GMLOG
 from classiqa.hosa import HOSA, LFA
 
-MODEL_DICT = {"sseq": SSEQ, "lfa": LFA, "hosa": HOSA}
+MODEL_DICT = {"sseq": SSEQ, "lfa": LFA, "hosa": HOSA, "gmlog": GMLOG}
 
 
 def extract_train_args():

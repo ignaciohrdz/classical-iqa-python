@@ -190,7 +190,7 @@ class SSEQ:
     def fit(self, feature_db, n_jobs=4):
         """
         Fit an SVR model to a given dset of ftrs
-        :param feature_db: dataframe with 14 columns:
+        :param feature_db: dataframe with 15 columns:
                         - image name
                         - 12 ftrs
                         - MOS
@@ -207,9 +207,6 @@ class SSEQ:
 
         X_test = feature_db.loc[test_mask, feature_cols].values
         y_test = feature_db.loc[test_mask, "MOS"].values
-
-        # X_train = np.float16(X_train)
-        # X_test = np.float16(X_test)
 
         params = {
             "svr__C": np.arange(1.0, 10, 0.5),

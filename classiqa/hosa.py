@@ -56,6 +56,15 @@ class HOSA:
         self.svr_regressor = svr_regressor
         self.test_size = test_size
 
+    def crop_input(self, x):
+        """We make sure the image is divisible into NxN tiles (N = patch_size)
+        If the image is not divisible, we crop it
+        starting from the top-left corner"""
+        h, w = x.shape
+        h_cropped = h - (h % self.patch_size)
+        w_cropped = w - (w % self.patch_size)
+        return x[:h_cropped, :w_cropped]
+
     def prepare_input(self, x):
         """Initial conversion to grayscale and resizing"""
 
@@ -84,15 +93,6 @@ class HOSA:
             return self.predict_score(features.reshape(1, -1))
         else:
             return features
-
-    def crop_input(self, x):
-        """We make sure the image is divisible into NxN tiles (N = patch_size)
-        If the image is not divisible, we crop it
-        starting from the top-left corner"""
-        h, w = x.shape
-        h_cropped = h - (h % self.patch_size)
-        w_cropped = w - (w % self.patch_size)
-        return x[:h_cropped, :w_cropped]
 
     def zca_whitening(self, x):
         """
