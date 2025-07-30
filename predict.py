@@ -1,4 +1,4 @@
-""" This is an example of how to use the models """
+"""This is an example of how to use the models"""
 
 import cv2
 import pickle
@@ -9,12 +9,16 @@ from pathlib import Path
 if __name__ == "__main__":
     args = extract_test_args()
 
+    # Debugging
+    args.model = "sseq"
+    args.use_dataset = "csiq"
+
     path_image_original = Path("images/test_image_orig.jpg")
     path_image_distorted = Path("images/test_image_dist.jpg")
 
     dset_name = args.use_dataset
     path_model = Path(args.path_models) / args.model / args.use_dataset
-    path_model_file = path_model / f"{args.use_dataset}_{args.model}.pkl"
+    path_model_file = path_model / "estimator.pkl"
     with open(path_model_file, "rb") as f:
         estimator = pickle.load(f)
 

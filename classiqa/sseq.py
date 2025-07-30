@@ -6,12 +6,12 @@ import pandas as pd
 from scipy.stats import skew
 from .metrics import lcc, srocc
 from .data import split_dataset
-
 from sklearn.svm import SVR
 from sklearn.metrics import make_scorer
 from sklearn.pipeline import make_pipeline
-from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.model_selection import GridSearchCV
 from sklearn.preprocessing import StandardScaler
+import pickle
 
 
 class SSEQ:
@@ -237,6 +237,12 @@ class SSEQ:
         }
 
         return search.cv_results_
+
+    def export(self, path_save):
+        path_pkl = path_save / "estimator.pkl"
+        print("Saving best SVR model to ", str(path_pkl))
+        with open(path_pkl, "wb") as f:
+            pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)
 
     def predict_score(self, f):
         """Predicts the score from a set of features (f)"""

@@ -1,4 +1,5 @@
 __pycache__
+/.vscode/
 /.idea/
-/models/
-/papers
+/classiqa/models/
+/papers/

@@ -2,11 +2,12 @@ import cv2
 import numpy as np
 import torch
 import torch.nn as nn
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, MiniBatchKMeans
 from scipy.spatial.distance import cdist
 import pandas as pd
 import random
 from .data import split_dataset
+from .processing import zca_whitening
 from pathlib import Path
 from sklearn.svm import SVR
 from sklearn.metrics import make_scorer
@@ -14,6 +15,8 @@ from sklearn.pipeline import make_pipeline
 from sklearn.model_selection import GridSearchCV
 from sklearn.preprocessing import StandardScaler
 from .metrics import lcc, srocc
+
+import pickle
 
 random.seed(420)
 
@@ -26,7 +29,8 @@ class HOSA:
         self,
         patch_size=7,
         codebook_size=100,
-        reduce_local=-1,
+        use_minibatch=True,
+        local_ftrs_frac=0.75,
         r=5,
         alpha=0.2,
         beta=0.05,
@@ -43,7 +47,8 @@ class HOSA:
         self.codebook = None
         self.codebook_stats = None
         self.codebook_size = codebook_size
-        self.reduce_local = reduce_local
+        self.use_minibatch = use_minibatch
+        self.local_ftrs_frac = local_ftrs_frac
         self.r = r
         self.alpha = alpha
         self.beta = beta
@@ -83,41 +88,15 @@ class HOSA:
 
     def __call__(self, x):
         x_gray = self.prepare_input(x)
-        fts = self.extract_features(x_gray)
-
-        features = np.array(fts)
+        ftrs = self.extract_features(x_gray)
+        ftrs = np.array(ftrs)
 
         # If we have loaded a SVR model, we predict the IQA score
         # The features are returned otherwise
         if self.svr_regressor is not None:
-            return self.predict_score(features.reshape(1, -1))
+            return self.predict_score(ftrs.reshape(1, -1))
         else:
-            return features
-
-    def zca_whitening(self, x):
-        """
-        Computes ZCA whitening matrix (aka Mahalanobis whitening).
-        Source: https://stackoverflow.com/a/38590790
-        :param x: [m x n] matrix (feature_length x n_samples)
-        :returns zca_mat: [m x m] matrix
-        """
-        # Covariance matrix [column-wise variables]: Sigma = (X-mu)' * (X-mu) / N
-        sigma = np.cov(x.T, rowvar=True)  # [M x M]
-
-        # Singular Value Decomposition. X = U * np.diag(S) * V
-        # U: eigenvectors
-        # S: eigenvalues
-        U, S, _ = np.linalg.svd(sigma)
-
-        epsilon = 1e-5  # prevents division by zero
-
-        zca_mat = np.dot(U, np.dot(np.diag(1.0 / np.sqrt(S + epsilon)), U.T))
-        x_white = np.dot(zca_mat, x.T)
-
-        # Float16 is more memory-efficient
-        x_white = np.float16(x_white)
-
-        return x_white.T
+            return ftrs
 
     def extract_local_features(self, x_gray):
         """Extracts the local features of an image
@@ -141,19 +120,19 @@ class HOSA:
         local_ftrs = local_ftrs.cpu().numpy()
 
         # ZCA whitening
-        local_ftrs = self.zca_whitening(local_ftrs)
+        local_ftrs = zca_whitening(local_ftrs)
 
-        # Using float16 more memory-efficient
+        # Using float16 is more memory-efficient
         local_ftrs = np.float16(local_ftrs)
 
         # I we're running HOSA on limited hardware,
         # we can't have all features because it takes too much RAM
         n_ftrs = len(local_ftrs)
-        if (self.reduce_local > 0) and (self.reduce_local < n_ftrs):
-            idxs = list(range(n_ftrs))
-            random.shuffle(idxs)
-            idxs = idxs[: self.reduce_local]
-            local_ftrs = local_ftrs[idxs]
+        n_sample = int(self.local_ftrs_frac * n_ftrs)
+        idxs = list(range(n_ftrs))
+        random.shuffle(idxs)
+        idxs = idxs[:n_sample]
+        local_ftrs = local_ftrs[idxs]
 
         return local_ftrs
 
@@ -182,7 +161,10 @@ class HOSA:
             f"Generating {self.codebook_size}-word codebook"
             f"(from {len(all_ftrs)} samples)"
         )
-        kmeans = KMeans(n_clusters=self.codebook_size, random_state=420)
+        if self.use_minibatch:
+            kmeans = MiniBatchKMeans(n_clusters=self.codebook_size, random_state=420)
+        else:
+            kmeans = KMeans(n_clusters=self.codebook_size, random_state=420)
         kmeans.fit(all_ftrs)
         self.codebook = np.float16(kmeans.cluster_centers_)  # [100 x D]
 
@@ -303,9 +285,9 @@ class HOSA:
     def fit(self, feature_db, n_jobs=4):
         """
         Fit an SVR model to a given dset of ftrs
-        :param feature_db: dataframe with 147003 columns:
+        :param feature_db: dataframe with the columns:
                     - image name
-                    - 147K ftrs
+                    - feature i ... feature N
                     - MOS
                     - test split indicator
         :param n_jobs: number of threads for GridSearchCV
@@ -361,6 +343,18 @@ class HOSA:
         score = self.svr_regressor.predict(f)
         return score
 
+    def export(self, path_save):
+        # Export the codebook and the codebook stats
+        print("Exporting the HOSA data to: ", path_save)
+        np.savetxt(path_save / "hosa_codebook.csv", self.codebook, delimiter=",")
+        np.savetxt(path_save / "codebook_stats.csv", self.codebook_stats, delimiter=",")
+
+        # Exporting the model
+        path_pkl = path_save / "estimator.pkl"
+        print("Saving best SVR model to ", str(path_pkl))
+        with open(path_pkl, "wb") as f:
+            pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)
+
 
 class LFA(HOSA):
     """Before HOSA, the authors developed LFA
@@ -371,7 +365,8 @@ class LFA(HOSA):
         self,
         patch_size=7,
         codebook_size=100,
-        reduce_local=-1,
+        use_minibatch=True,
+        local_ftrs_frac=0.50,
         r=5,
         alpha=0.2,
         beta=0.05,
@@ -387,7 +382,8 @@ class LFA(HOSA):
         # Parameters related to the K nearest codewords
         self.codebook = None
         self.codebook_size = codebook_size
-        self.reduce_local = reduce_local
+        self.use_minibatch = use_minibatch
+        self.local_ftrs_frac = local_ftrs_frac
         self.r = r
         self.alpha = alpha
         self.beta = beta
@@ -396,7 +392,7 @@ class LFA(HOSA):
         # For normalization
         self.eps = eps
 
-        self.n_features = 3 * self.n_dims * self.codebook_size
+        self.n_features = self.n_dims * self.codebook_size
         self.svr_regressor = svr_regressor
         self.test_size = test_size
 
@@ -425,7 +421,10 @@ class LFA(HOSA):
             f"Generating {self.codebook_size}-word codebook"
             f"(from {len(all_ftrs)} samples)"
         )
-        kmeans = KMeans(n_clusters=self.codebook_size, random_state=420)
+        if self.use_minibatch:
+            kmeans = MiniBatchKMeans(n_clusters=self.codebook_size, random_state=420)
+        else:
+            kmeans = KMeans(n_clusters=self.codebook_size, random_state=420)
         kmeans.fit(all_ftrs)
         self.codebook = np.float16(kmeans.cluster_centers_)  # [100 x D]
 
@@ -467,3 +466,14 @@ class LFA(HOSA):
         out = out / np.linalg.norm(out)
 
         return np.float16(np.squeeze(out))
+
+    def export(self, path_save):
+        # Export the codebook
+        print("Exporting the LFA data to: ", path_save)
+        np.savetxt(path_save / "lfa_codebook.csv", self.codebook, delimiter=",")
+
+        # Exporting the model
+        path_pkl = path_save / "estimator.pkl"
+        print("Saving best SVR model to ", str(path_pkl))
+        with open(path_pkl, "wb") as f:
+            pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)

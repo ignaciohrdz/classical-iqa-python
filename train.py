@@ -1,14 +1,18 @@
-""" Train a SVR on IQA datasets """
+"""Train a SVR on IQA datasets"""
 
+from classiqa.utils import extract_train_args, resolve_model
 from classiqa.data import dataset_fn_dict
 import pandas as pd
-from classiqa.utils import extract_train_args, resolve_model
 from pathlib import Path
-import pickle
 
 
 if __name__ == "__main__":
     args = extract_train_args()
+
+    args.path_datasets = "/home/ignaciohmon/Datasets/iqa_datasets"
+    args.use_dataset = "csiq"
+    args.model = "lfa"
+    args.overwrite = True
 
     # Define the score without a regressor to obtain the features
     estimator = resolve_model(args.model)
@@ -18,6 +22,7 @@ if __name__ == "__main__":
 
     path_dataset = Path(args.path_datasets) / args.use_dataset
     path_feature_db = path_dataset / f"feature_db_{args.model}.csv"
+
     if not path_feature_db.exists() or args.overwrite:
         # We generate the feature database
         # that will be used to fit an SVR later
@@ -32,8 +37,7 @@ if __name__ == "__main__":
     results = estimator.fit(feature_db)
     results = pd.DataFrame(results)
     results.to_csv(path_model / f"{args.use_dataset}_results.csv", index=False)
-    path_model_file = path_model / f"{args.use_dataset}_{args.model}.pkl"
     print("Test results: ", estimator.test_results)
-    print("Saving best SVR model to ", str(path_model_file))
-    with open(path_model_file, "wb") as f:
-        pickle.dump(estimator, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    # Exporting the IQA model
+    estimator.export(path_model)

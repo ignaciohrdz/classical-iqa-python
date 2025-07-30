@@ -1,6 +1,6 @@
 # Classical IQA methods
 
-This repository is a collection of classical IQA methods long forgotten in favour of deep learning-based IQA methods. I am doing this because lots of papers cite classical methods when testing new IQA methods and many of them are not very well documented (GM-LOG, SSEQ, CORNIA, LFA, HOSA...). If all of them are implemented in a single package, it would be easier to try them.
+This repository is a collection of classical IQA methods, long forgotten in favour of deep learning-based IQA methods. I am doing this because lots of papers cite classical methods when testing new IQA methods and many of them are not very well documented (GM-LOG, SSEQ, CORNIA, LFA, HOSA...). If all of them were implemented in a single package, it would be easier to try them.
 
 ## Implemented methods
 
@@ -8,6 +8,7 @@ This repository is a collection of classical IQA methods long forgotten in favou
 - [HOSA](#high-orderd-statistics-aggregation-hosa)
 - [LFA](#local-feature-aggregation-lfa)
 - [GM-LOG](#gradient-magnitude-and-laplacian-features-gm-log)
+- [SOM](#semantic-obviousness-metric-som)
 
 ### Spatial-Spectral Entropy-based Quality (SSEQ) index
 
@@ -22,15 +23,23 @@ Order Statistics Aggregation (Xu et al.)](https://ieeexplore.ieee.org/document/7
 
 - Using **16-bit precision** whenever possibe: The construction of the visual codebook is memory-hungry, and probably not meant to be done with a laptop. Each local feature corresponds to a BxB patch, which results in (HxW)/(BxB) patches, and that can take a lot of RAM if you are using a large image dataset. For example, if we resized the images from KonIQ-10k to make them 512x382, each image would produce 3942 local features, which would result in more than 39M features for the whole dataset! Imagine if we used the original image size...
 - **Image resizing**: Related to my first point, it's not clear whether the images undergo any resizing or if HOSA was designed to work for all image sizes. To make it comparable to other IQA measures I implement, I'm resizing the images to 512px prior to feature extraction.
+- **Mini-batch K-means**: If we use larger IQA datasets, K-means will be very slow, so I decided to try this variation to see if it can speed up the learning phase.
 
 ### Local Feature Aggregation (LFA)
 
-One year before HOSA, the same authors presented LFA in [Local Feature Aggregation for Blind Image Quality
-Assessment (Xu et al. 2015)](https://ieeexplore.ieee.org/abstract/document/7457832), which can be considered the precursor of HOSA. As it follows a similar approach (generating a codebook and computing some metrics with each cluster's assignments), I've also implemented it.
+One year before HOSA, the same authors presented LFA in [Local Feature Aggregation for Blind Image Quality Assessment (Xu et al. 2015)](https://ieeexplore.ieee.org/abstract/document/7457832), which can be considered the precursor of HOSA. As it follows a similar approach (generating a codebook and computing some metrics with each cluster's assignments), I've also implemented it with the same tricks I used for HOSA.
 
 ### Gradient Magnitude and Laplacian features (GM-LOG)
 
 This measure was proposed in [Blind Image Quality Assessment Using Joint Statistics of Gradient Magnitude and Laplacian Features (Xue et al., 2014)](https://ieeexplore.ieee.org/abstract/document/6894197). The authors share a [MATLAB implementation](http://www4.comp.polyu.edu.hk/~cslzhang/code/GM-LOG-BIQA.zip).
+
+### Semantic Obviousness Metric (SOM)
+
+This one was presented in [SOM: Semantic Obviousness Metric for Image Quality Assessment (Zhang et al.)](https://openaccess.thecvf.com/content_cvpr_2015/papers/Zhang_SOM_Semantic_Obviousness_2015_CVPR_paper.pdf). This measure uses the BING model for saliency detection. You can find the BING model files in [this repo](https://github.com/methylDragon/opencv-python-reference/tree/master/Resources/Models/bing_objectness_model).
+
+Unfortunately, the paper did not provide enough the details for the implementation, such as the computing requirements, or any link to their code. I had to make some assumptions and tweak some parameters to make it less memory-hungry, and also use 16-bit precision and mini-batch K-means.
+
+Moreover, the BING object-like detector doesn't seem to work as expected either, as it is much slower than [what the authors of BING reported (300fps)](https://mmcheng.net/mftp/Papers/ObjectnessBING.pdf). After a quick search, this appears to have happenned to other people, and the OpenCV documentation for these saliency models is useless and almost non-existent.
 
 ## How to train an IQA model
 

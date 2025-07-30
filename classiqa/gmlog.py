@@ -1,19 +1,15 @@
 import cv2
 import numpy as np
-import torch
-import torch.nn as nn
-from sklearn.cluster import KMeans
-from scipy.spatial.distance import cdist
 import pandas as pd
 import random
 from .data import split_dataset
-from pathlib import Path
 from sklearn.svm import SVR
 from sklearn.metrics import make_scorer
 from sklearn.pipeline import make_pipeline
 from sklearn.model_selection import GridSearchCV
 from sklearn.preprocessing import StandardScaler
 from .metrics import lcc, srocc
+import pickle
 
 random.seed(420)
 
@@ -34,6 +30,8 @@ class GMLOG:
         bins_log=10,
         epsilon=0.25,
         alpha=0.0001,
+        test_size=0.3,
+        svr_regressor=None,
     ):
 
         self.img_size = img_size
@@ -43,6 +41,8 @@ class GMLOG:
         self.epsilon = epsilon
         self.alpha = alpha
         self.n_features = 2 * (bins_gm + bins_log)
+        self.test_size = test_size
+        self.svr_regressor = svr_regressor
 
         # Using the author's settings
         self.kernel_size = int(2 * np.ceil(3 * self.sigma) + 1)
@@ -54,20 +54,10 @@ class GMLOG:
         )
         self.log_kernel = self.make_laplacian_of_gaussian(self.kernel_size, self.sigma)
 
-    def crop_input(self, x_gray):
-        """We make sure the image is divisible into NxN tiles (N = patch_size)
-        If the image is not divisible, we crop it
-        starting from the top-left corner"""
-        h, w = x_gray.shape
-        h_cropped = h - (h % self.patch_size)
-        w_cropped = w - (w % self.patch_size)
-        return x_gray[:h_cropped, :w_cropped]
-
     def prepare_input(self, x):
         """Initial conversion to grayscale and resizing"""
 
         x_gray = cv2.cvtColor(x, cv2.COLOR_BGR2GRAY)
-        x_gray = self.crop_input(x_gray)
         if self.img_size > 0:
             ratio = self.img_size / max(x_gray.shape)
             x_gray = cv2.resize(
@@ -236,6 +226,24 @@ class GMLOG:
         }
 
         return search.cv_results_
+
+    def __call__(self, x):
+        x_gray = self.prepare_input(x)
+        fts = self.extract_features(x_gray)
+        features = np.array(fts)
+
+        # If we have loaded a SVR model, we predict the IQA score
+        # The features are returned otherwise
+        if self.svr_regressor is not None:
+            return self.predict_score(features.reshape(1, -1))
+        else:
+            return features
+
+    def export(self, path_save):
+        path_pkl = path_save / "estimator.pkl"
+        print("Saving best SVR model to ", str(path_pkl))
+        with open(path_pkl, "wb") as f:
+            pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)
 
     def predict_score(self, f):
         """Predicts the score from a set of features (f)"""

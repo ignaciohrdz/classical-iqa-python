@@ -3,8 +3,10 @@ from classiqa.data import dataset_names
 from classiqa.sseq import SSEQ
 from classiqa.gmlog import GMLOG
 from classiqa.hosa import HOSA, LFA
+from classiqa.som import SOM
+import pickle
 
-MODEL_DICT = {"sseq": SSEQ, "lfa": LFA, "hosa": HOSA, "gmlog": GMLOG}
+MODEL_DICT = {"sseq": SSEQ, "lfa": LFA, "hosa": HOSA, "gmlog": GMLOG, "som": SOM}
 
 
 def extract_train_args():
@@ -27,7 +29,7 @@ def extract_train_args():
     parser.add_argument(
         "--path_models",
         type=str,
-        default="models",
+        default="classiqa/models",
         help="Location of the trained SVR models and measures",
     )
     parser.add_argument(
@@ -55,7 +57,7 @@ def extract_test_args():
     parser.add_argument(
         "--path_models",
         type=str,
-        default="models",
+        default="classiqa/models",
         help="Location of the trained SVR models and measures",
     )
     args = parser.parse_args()
