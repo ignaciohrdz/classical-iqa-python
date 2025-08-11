@@ -10,8 +10,8 @@ if __name__ == "__main__":
     args = extract_train_args()
 
     args.path_datasets = "/home/ignaciohmon/Datasets/iqa_datasets"
-    args.use_dataset = "csiq"
-    args.model = "lfa"
+    args.use_dataset = "tid2013"
+    args.model = "cornia"
     args.overwrite = True
 
     # Define the score without a regressor to obtain the features
