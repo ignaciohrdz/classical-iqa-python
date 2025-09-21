@@ -2,8 +2,66 @@ import pandas as pd
 from pathlib import Path
 import scipy
 import random
+import torch
+from torch.utils.data import Dataset, DataLoader
+import cv2
+import numpy as np
+import albumentations as A
 
 random.seed(420)
+
+
+def IqaDataset(Dataset):
+
+    def __init__(self, data: pd.DataFrame, augment=True, crop_pct=0.90, flip_prob=0.5):
+        """
+        Arguments:
+            data: DataFrame with the annotations (generated with the 'prepare_X' functions).
+            augment: Apply simple augmentations (random crop and/or horizontal flip).
+            crop_pct: Percentage of the image to crop. The crop should not be too agressive to ensure
+                        most of the image's content is still present
+            flip_prob: random horizontal flip probability
+        """
+        super(Dataset, self).__init__()
+        self.data = data
+        self.augment = augment
+        self.crop_pct = crop_pct
+        self.flip_prob = flip_prob
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+
+        img_path = self.data.loc[idx, "image_path"]
+        image = cv2.imread(img_path)
+        score = self.data.iloc[idx, "score"].astype(np.float16)
+
+        # Optional augmentation
+        if self.augment:
+            # Random crop
+            img_h, img_w = image.shape[:2]
+            crop_h, crop_w = [int(d * self.crop_pct) for d in image.shape[:2]]
+
+            w_start = random.randint(0, img_w - crop_w)
+            h_start = random.randint(0, img_h - crop_h)
+
+            w_end = w_start + crop_w
+            h_end = h_start + crop_h
+            image = image[h_start:h_end, w_start:w_end, :]
+
+            # Random flip
+            if random.random() >= self.flip_prob:
+                image = cv2.flip(image, 1)
+
+        sample = {"image": image, "score": score}
+
+        if self.transform:
+            sample = self.transform(sample)
+
+        return sample
 
 
 def split_dataset(dset, test_size=0.2):
@@ -27,7 +85,11 @@ def split_dataset(dset, test_size=0.2):
         random.shuffle(idxs)
         test_idx = idxs[: int(len(idxs) * test_size)]
         dset.loc[test_idx, "is_test"] = 1
+        dset["image_set"] = "image_" + dset.index.astype(str)
     return dset
+
+
+# TODO: Add URLs and explain the user how to download the datasets
 
 
 def prepare_koniq(path_koniq: Path):
@@ -94,8 +156,8 @@ def prepare_liveiqa(path_liveiqa: Path):
     path_dataset = path_liveiqa / "databaserelease2"
     path_scores = path_dataset / "dmos.mat"
     mat_file = scipy.io.loadmat(str(path_scores))
-    dmos = mat_file["dmos"]
-    is_original = mat_file["orgs"]
+    dmos = mat_file["dmos"][0]
+    is_original = mat_file["orgs"][0]
 
     # The Readme.txt file from the database tells us
     # the number of images per distortion
@@ -106,15 +168,33 @@ def prepare_liveiqa(path_liveiqa: Path):
         "gblur": 174,
         "fastfading": 174,
     }
-    dataset = pd.DataFrame(columns=["image_path", "image_name", "score"])
+
+    # We will use the information files from each subset to group the images
+    img_sets = {}
+    for dist_name in distortion_sizes.keys():
+        path_info = path_dataset / dist_name / "info.txt"
+        dist_info = pd.read_csv(path_info, sep=" ", header=None)
+        dist_info = dist_info.iloc[:, :3]
+        dist_info.columns = ["source", "dest", "param"]
+        img_sets[dist_name] = dist_info
+
+    dataset = pd.DataFrame(columns=["image_path", "image_name", "score", "image_set"])
     offset = 0
     for dist_name, n_imgs in distortion_sizes.items():
         for i in range(n_imgs):
-            if is_original[0, offset + i] == 0:
+            if is_original[offset + i] == 0:
                 image_name = "img{}.bmp".format(i + 1)
                 image_path = path_dataset / dist_name / image_name
-                score = dmos[0, offset + i]
-                dataset.loc[len(dataset), :] = [image_path, image_name, score]
+                dist_info = img_sets[dist_name]
+                image_set = dist_info.loc[dist_info["dest"] == image_name, "source"]
+                image_set = image_set.values[0]
+                score = dmos[offset + i]
+                dataset.loc[len(dataset), :] = [
+                    image_path,
+                    image_name,
+                    score,
+                    image_set,
+                ]
         offset += n_imgs
     return dataset
 

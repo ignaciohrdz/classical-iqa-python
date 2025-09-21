@@ -12,15 +12,13 @@ from pathlib import Path
 from sklearn.svm import SVR
 from sklearn.metrics import make_scorer
 from sklearn.pipeline import make_pipeline
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import GridSearchCV, GroupKFold
 from sklearn.preprocessing import StandardScaler
 from .metrics import lcc, srocc
 import os
 import pickle
 
 random.seed(420)
-
-# TODO: Use h5py to deal with large datasets during k-means
 
 
 class CORNIA:
@@ -38,7 +36,6 @@ class CORNIA:
         eps=1e-6,
         codebook=None,
         svr_regressor=None,
-        test_size=0.2,
     ):
         self.img_size = img_size
         self.patch_size = patch_size
@@ -50,7 +47,6 @@ class CORNIA:
 
         self.n_features = self.num_patches
         self.svr_regressor = svr_regressor
-        self.test_size = test_size
 
         # We set stride to half the patch size to allow some overlapping
         self.patch_stride = self.patch_size // 2
@@ -178,16 +174,17 @@ class CORNIA:
 
         return np.float16(coefs)
 
-    def generate_feature_db(self, dset):
+    def generate_feature_db(self, dset, test_size=0.2):
         """Creates the feature database that will be used to fit the SVR
         :param dset: a DataFrame with columns [image_name, image_path, score, [img_set]]
                     (not all datasets have the img_set columns, only those that contain
                       groups of distorted images created from the same pristine source)
+        :param test_size: percentage of images for the test set
         """
 
         # Creating the train/test splits
         if "is_test" not in dset.columns:
-            dset = split_dataset(dset, self.test_size)
+            dset = split_dataset(dset, test_size)
 
         # We first create the codebook
         if not self.codebook:
@@ -200,16 +197,17 @@ class CORNIA:
         for i, row in enumerate(dset.to_dict("records")):
             im_name = row["image_name"]
             im_path = row["image_path"]
+            im_set = row["image_set"]
             im_score = row["score"]
             im_split = row["is_test"]
             print(f"[Features][{i+1}/{len(dset)}]: Processing {im_name}")
             img = cv2.imread(im_path)
             img_gray = self.prepare_input(img)
             ftrs = list(self.extract_features(img_gray))
-            feature_db.append([im_name] + ftrs + [im_score, im_split])
+            feature_db.append([im_name] + ftrs + [im_score, im_split, im_set])
 
         feature_cols = list(range(1, self.n_features + 1))
-        db_cols = ["image_name"] + feature_cols + ["MOS", "is_test"]
+        db_cols = ["image_name"] + feature_cols + ["MOS", "is_test", "image_set"]
         feature_db = pd.DataFrame(feature_db, columns=db_cols)
 
         return feature_db
@@ -223,13 +221,12 @@ class CORNIA:
                     - MOS
                     - test split indicator
         :param n_jobs: number of threads for GridSearchCV
-        :param test_size: test set size
         """
 
         # Making the splits
         train_mask = feature_db["is_test"] == 0
         test_mask = feature_db["is_test"] == 1
-        feature_cols = feature_db.columns[1:-2]
+        feature_cols = feature_db.columns[1:-3]
 
         X_train = feature_db.loc[train_mask, feature_cols].values
         y_train = feature_db.loc[train_mask, "MOS"].values
@@ -257,19 +254,18 @@ class CORNIA:
             refit="SROCC",
         )
 
-        print("Fitting an SVR for CORNIA features")
         search.fit(X_train, y_train)
         self.svr_regressor = search.best_estimator_
         print(self.svr_regressor[1].C, self.svr_regressor[1].epsilon)
 
         # Test metrics
         y_pred = self.svr_regressor.predict(X_test)
-        self.test_results = {
+        test_results = {
             "LCC": lcc(y_test, y_pred),
             "SROCC": srocc(y_test, y_pred),
         }
 
-        return search.cv_results_
+        return search.cv_results_, test_results
 
     def predict_score(self, f):
         """Predicts the score from a set of ftrs"""
@@ -282,8 +278,8 @@ class CORNIA:
         np.savetxt(path_save / "cornia_codebook.csv", self.codebook, delimiter=",")
 
         # Exporting the model
-        path_pkl = path_save / "estimator.pkl"
-        print("Saving best SVR model to ", str(path_pkl))
+        path_pkl = path_save / "feature_extractor.pkl"
+        print("Saving feature extractor to ", str(path_pkl))
         with open(path_pkl, "wb") as f:
             pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -316,7 +312,6 @@ class HOSA:
         img_size=512,
         eps=10,
         svr_regressor=None,
-        test_size=0.3,
     ):
         self.img_size = img_size
         self.patch_size = patch_size
@@ -338,7 +333,6 @@ class HOSA:
 
         self.n_features = 3 * self.n_dims * self.codebook_size
         self.svr_regressor = svr_regressor
-        self.test_size = test_size
 
     def crop_input(self, x):
         """We make sure the image is divisible into NxN tiles (N = patch_size)
@@ -529,16 +523,17 @@ class HOSA:
 
         return np.float16(np.squeeze(out))
 
-    def generate_feature_db(self, dset):
+    def generate_feature_db(self, dset, test_size=0.3):
         """Creates the feature database that will be used to fit the SVR
         :param dset: a DataFrame with columns [image_name, image_path, score, [img_set]]
                     (not all datasets have the img_set columns, only those that contain
                       groups of distorted images created from the same pristine source)
+        :param test_size: percentage of images for the test set
         """
 
         # Creating the train/test splits
         if "is_test" not in dset.columns:
-            dset = split_dataset(dset, self.test_size)
+            dset = split_dataset(dset, test_size)
 
         # We first create the codebook
         if not self.codebook or not self.codebook_stats:
@@ -551,16 +546,17 @@ class HOSA:
         for i, row in enumerate(dset.to_dict("records")):
             im_name = row["image_name"]
             im_path = row["image_path"]
+            im_set = row["image_set"]
             im_score = row["score"]
             im_split = row["is_test"]
             print(f"[Features][{i+1}/{len(dset)}]: Processing {im_name}")
             img = cv2.imread(im_path)
             img_gray = self.prepare_input(img)
             ftrs = list(self.extract_features(img_gray))
-            feature_db.append([im_name] + ftrs + [im_score, im_split])
+            feature_db.append([im_name] + ftrs + [im_score, im_split, im_set])
 
         feature_cols = list(range(1, self.n_features + 1))
-        db_cols = ["image_name"] + feature_cols + ["MOS", "is_test"]
+        db_cols = ["image_name"] + feature_cols + ["MOS", "is_test", "image_set"]
         feature_db = pd.DataFrame(feature_db, columns=db_cols)
 
         return feature_db
@@ -574,13 +570,12 @@ class HOSA:
                     - MOS
                     - test split indicator
         :param n_jobs: number of threads for GridSearchCV
-        :param test_size: test set size
         """
 
         # Making the splits
         train_mask = feature_db["is_test"] == 0
         test_mask = feature_db["is_test"] == 1
-        feature_cols = feature_db.columns[1:-2]
+        feature_cols = feature_db.columns[1:-3]
 
         X_train = feature_db.loc[train_mask, feature_cols].values
         y_train = feature_db.loc[train_mask, "MOS"].values
@@ -596,10 +591,13 @@ class HOSA:
             "svr__epsilon": np.arange(0.25, 2.0, 0.25),
         }
 
+        cv = GroupKFold(n_splits=5)
+        image_sets = feature_db.loc[train_mask, "image_set"].tolist()
+
         search = GridSearchCV(
             estimator=make_pipeline(StandardScaler(), SVR()),
             param_grid=params,
-            cv=5,
+            cv=cv.split(X_train, y_train, groups=image_sets),
             n_jobs=n_jobs,
             verbose=1,
             scoring={"LCC": make_scorer(lcc), "SROCC": make_scorer(srocc)},
@@ -607,19 +605,18 @@ class HOSA:
             refit="SROCC",
         )
 
-        print("Fitting an SVR for HOSA features")
         search.fit(X_train, y_train)
         self.svr_regressor = search.best_estimator_
         print(self.svr_regressor[1].C, self.svr_regressor[1].epsilon)
 
         # Test metrics
         y_pred = self.svr_regressor.predict(X_test)
-        self.test_results = {
+        test_results = {
             "LCC": lcc(y_test, y_pred),
             "SROCC": srocc(y_test, y_pred),
         }
 
-        return search.cv_results_
+        return search.cv_results_, test_results
 
     def predict_score(self, f):
         """Predicts the score from a set of ftrs"""
@@ -633,8 +630,8 @@ class HOSA:
         np.savetxt(path_save / "codebook_stats.csv", self.codebook_stats, delimiter=",")
 
         # Exporting the model
-        path_pkl = path_save / "estimator.pkl"
-        print("Saving best SVR model to ", str(path_pkl))
+        path_pkl = path_save / "feature_extractor.pkl"
+        print("Saving feature extractor to ", str(path_pkl))
         with open(path_pkl, "wb") as f:
             pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -656,7 +653,6 @@ class LFA(HOSA):
         img_size=512,
         eps=10,
         svr_regressor=None,
-        test_size=0.3,
     ):
         self.img_size = img_size
         self.patch_size = patch_size
@@ -677,7 +673,6 @@ class LFA(HOSA):
 
         self.n_features = self.n_dims * self.codebook_size
         self.svr_regressor = svr_regressor
-        self.test_size = test_size
 
     def generate_codebook(self, dset):
         """In HOSA, we need to generate the K-word codebook (K clusters)
@@ -760,8 +755,8 @@ class LFA(HOSA):
         np.savetxt(path_save / "lfa_codebook.csv", self.codebook, delimiter=",")
 
         # Exporting the model
-        path_pkl = path_save / "estimator.pkl"
-        print("Saving best SVR model to ", str(path_pkl))
+        path_pkl = path_save / "feature_extractor.pkl"
+        print("Saving feature extractor to ", str(path_pkl))
         with open(path_pkl, "wb") as f:
             pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -782,7 +777,6 @@ class SOM:
         num_training_reps=3,
         codebook_size=10000,
         use_minibatch=True,
-        test_size=0.2,
         codebook=None,
         svr_regressor=None,
         eps=1e-6,  # to prevent NaNs
@@ -799,7 +793,6 @@ class SOM:
         # Some new parameters for my implementation
         self.regions_per_patch = regions_per_patch
         self.svr_regressor = svr_regressor
-        self.test_size = test_size
         self.codebook = codebook
         self.use_minibatch = use_minibatch
         self.eps = eps
@@ -937,16 +930,17 @@ class SOM:
 
         return final_ftrs
 
-    def generate_feature_db(self, dset):
+    def generate_feature_db(self, dset, test_size=0.2):
         """Creates the feature database that will be used to fit the regressor
         :param dset: a DataFrame with columns [image_name, image_path, score, [img_set]]
                     (not all datasets have the img_set columns, only those that contain
                       groups of distorted images created from the same pristine source)
+        :param test_size: percentage of images for the test set
         """
 
         # Creating the train/test splits
         if "is_test" not in dset.columns:
-            dset = split_dataset(dset, self.test_size)
+            dset = split_dataset(dset, test_size)
 
         # We first create the codebook
         if not self.codebook:
@@ -959,75 +953,19 @@ class SOM:
         for i, row in enumerate(dset.to_dict("records")):
             im_name = row["image_name"]
             im_path = row["image_path"]
+            im_set = row["image_set"]
             im_score = row["score"]
             im_split = row["is_test"]
             print(f"[Features][{i+1}/{len(dset)}]: Processing {im_name}")
             img = cv2.imread(im_path)
             ftrs = list(self.extract_features(img))
-            feature_db.append([im_name] + ftrs + [im_score, im_split])
+            feature_db.append([im_name] + ftrs + [im_score, im_split, im_set])
 
         feature_cols = list(range(1, self.n_features + 1))
-        db_cols = ["image_name"] + feature_cols + ["MOS", "is_test"]
+        db_cols = ["image_name"] + feature_cols + ["MOS", "is_test", "image_set"]
         feature_db = pd.DataFrame(feature_db, columns=db_cols)
 
         return feature_db
-
-    def fit(self, feature_db, n_jobs=4):
-        """
-        Fit an SVR model to a given dset of ftrs
-        :param feature_db: dataframe with the columns:
-                    - image name
-                    - feature i ... feature N
-                    - MOS
-                    - test split indicator
-        :param n_jobs: number of threads for GridSearchCV
-        :param test_size: test set size
-        """
-
-        # Making the splits
-        train_mask = feature_db["is_test"] == 0
-        test_mask = feature_db["is_test"] == 1
-        feature_cols = feature_db.columns[1:-2]
-
-        X_train = feature_db.loc[train_mask, feature_cols].values
-        y_train = feature_db.loc[train_mask, "MOS"].values
-
-        X_test = feature_db.loc[test_mask, feature_cols].values
-        y_test = feature_db.loc[test_mask, "MOS"].values
-
-        # X_train = np.float16(X_train)
-        # X_test = np.float16(X_test)
-
-        params = {
-            "svr__C": np.arange(5, 10, 0.5),
-            "svr__epsilon": np.arange(0.25, 2.0, 0.25),
-        }
-
-        # The authors of SOM used a linear kernel
-        search = GridSearchCV(
-            estimator=make_pipeline(StandardScaler(), SVR(kernel="linear")),
-            param_grid=params,
-            cv=5,
-            n_jobs=n_jobs,
-            verbose=1,
-            scoring={"LCC": make_scorer(lcc), "SROCC": make_scorer(srocc)},
-            error_score=0,
-            refit="SROCC",
-        )
-
-        print("Fitting an SVR for HOSA features")
-        search.fit(X_train, y_train)
-        self.svr_regressor = search.best_estimator_
-        print(self.svr_regressor[1].C, self.svr_regressor[1].epsilon)
-
-        # Test metrics
-        y_pred = self.svr_regressor.predict(X_test)
-        self.test_results = {
-            "LCC": lcc(y_test, y_pred),
-            "SROCC": srocc(y_test, y_pred),
-        }
-
-        return search.cv_results_
 
     def predict_score(self, f):
         """Predicts the score from a set of ftrs"""
@@ -1036,8 +974,8 @@ class SOM:
 
     def export(self, path_save):
         # Exporting the model
-        path_pkl = path_save / "estimator.pkl"
-        print("Saving best SVR model to ", str(path_pkl))
+        path_pkl = path_save / "feature_extractor.pkl"
+        print("Saving feature extractor to ", str(path_pkl))
         with open(path_pkl, "wb") as f:
             pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)
 
