@@ -3,12 +3,6 @@ import numpy as np
 import pandas as pd
 import random
 from .data import split_dataset
-from sklearn.svm import SVR
-from sklearn.metrics import make_scorer
-from sklearn.pipeline import make_pipeline
-from sklearn.model_selection import GridSearchCV
-from sklearn.preprocessing import StandardScaler
-from .metrics import lcc, srocc
 import pickle
 
 random.seed(420)
@@ -31,7 +25,6 @@ class GMLOG:
         epsilon=0.25,
         alpha=0.0001,
         test_size=0.3,
-        svr_regressor=None,
     ):
 
         self.img_size = img_size
@@ -42,17 +35,20 @@ class GMLOG:
         self.alpha = alpha
         self.n_features = 2 * (bins_gm + bins_log)
         self.test_size = test_size
-        self.svr_regressor = svr_regressor
 
         # Using the author's settings
-        self.kernel_size = int(2 * np.ceil(3 * self.sigma) + 1)
-        self.gaussian_kernel = self.make_gaussian_kernel(
-            self.kernel_size, self.sigma * 2
-        )
+        self.kernel_size = int(2 * np.ceil(3 * self.sigma) + 1 + 2)
         self.gaussian_deriv_x, self.gaussian_deriv_y = (
             self.make_gaussian_first_derivative(self.kernel_size, self.sigma)
         )
         self.log_kernel = self.make_laplacian_of_gaussian(self.kernel_size, self.sigma)
+
+        # Kernel for Joint Adaptive Normalization (JAN)
+        self.sigma_jan = 2 * self.sigma
+        self.kernel_size_jan = int(2 * np.ceil(3 * self.sigma_jan) + 1)
+        self.gaussian_kernel = self.make_gaussian_kernel(
+            self.kernel_size_jan, self.sigma_jan
+        )
 
     def prepare_input(self, x):
         """Initial conversion to grayscale and resizing"""
