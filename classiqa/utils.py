@@ -6,9 +6,9 @@ from classiqa.codebook import CORNIA, HOSA, LFA, SOM
 
 import numpy as np
 from .metrics import lcc, srocc
-from sklearn.svm import SVR
+from sklearn.svm import SVR, LinearSVR
 from sklearn.metrics import make_scorer
-from sklearn.pipeline import make_pipeline
+from sklearn.pipeline import Pipeline
 from sklearn.model_selection import GridSearchCV, GroupKFold
 from sklearn.preprocessing import StandardScaler
 import pickle
@@ -117,19 +117,26 @@ class ScoreRegressor:
         y_test = feature_db.loc[test_mask, "MOS"].values
 
         params = {
-            "svr__C": np.arange(1.0, 10, 0.5),
-            "svr__epsilon": np.arange(0.1, 2.0, 0.1),
+            "model__C": np.arange(1.0, 10, 0.5),
+            "model__epsilon": np.arange(0.1, 2.0, 0.1),
         }
 
         # In datasets with artificial distortions, we must make sure that all the images
         # in a set are put in the same split. We do this with GroupKFold
         cv = GroupKFold(n_splits=5)
         image_sets = feature_db.loc[train_mask, "image_set"].tolist()
+        folds_crossval = cv.split(X_train, y_train, groups=image_sets)
 
+        if len(feature_db) > 10000:
+            svr = LinearSVR(max_iter=10000)
+        else:
+            svr = SVR(kernel="rbf")
+
+        estimator = Pipeline(steps=[("scaler", StandardScaler()), ("model", svr)])
         search = GridSearchCV(
-            estimator=make_pipeline(StandardScaler(), SVR()),
+            estimator=estimator,
             param_grid=params,
-            cv=cv.split(X_train, y_train, groups=image_sets),
+            cv=folds_crossval,
             n_jobs=n_jobs,
             verbose=1,
             scoring={"LCC": make_scorer(lcc), "SROCC": make_scorer(srocc)},
