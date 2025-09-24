@@ -143,18 +143,14 @@ class ScoreRegressor:
             error_score=0,
             refit="SROCC",
         )
-
         search.fit(X_train, y_train)
-        best_svr = search.best_estimator_[1]
-        best_c = best_svr.C
-        best_eps = best_svr.epsilon
 
-        # Fittting the SVR on the entire training set
-        print(f"Training the SVR with the best params (C={best_c}, eps={best_eps:.2f})")
-        self.svr_regressor = make_pipeline(
-            StandardScaler(), SVR(C=best_c, epsilon=best_eps)
-        )
-        self.svr_regressor.fit(X_train, y_train)
+        # After running search.fit, we will already have the best model trained
+        # on the entire training set (because we used the 'refit' argument)
+        self.svr_regressor = search.best_estimator_[1]
+        best_c = self.svr_regressor.C
+        best_eps = self.svr_regressor.epsilon
+        print(f"Best C: {best_c} | Best epsilon: {best_eps}")
 
         # Test metrics
         y_pred = self.svr_regressor.predict(X_test)
