@@ -58,3 +58,4 @@ I'm using the following datasets:
 - [LIVE-IQA](https://qualinet.github.io/databases/image/live_image_quality_assessment_database/)
 - [TID2013](https://qualinet.github.io/databases/image/tampere_image_database_tid2013/)
 - [CSIQ](https://qualinet.github.io/databases/image/categorical_image_quality_csiq_database/)
+- [CID:IQ](https://folk.ntnu.no/mariupe/CIDIQ.zip)

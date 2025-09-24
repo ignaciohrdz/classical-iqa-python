@@ -18,7 +18,6 @@ class SSEQ:
         percentile=0.6,
         scales=3,
         eps=1e-5,
-        svr_regressor=None,
     ):
         self.block_size = block_size
         self.img_size = img_size
@@ -26,7 +25,6 @@ class SSEQ:
         self.scales = scales
         self.eps = eps
         self.unfold = nn.Unfold(kernel_size=self.block_size, stride=self.block_size)
-        self.svr_regressor = svr_regressor
         self.n_features = self.scales * 4
 
         self.m = self.make_dct_matrix()
@@ -144,7 +142,7 @@ class SSEQ:
         return x[start:end]
 
     def generate_feature_db(self, dset, test_size=0.3):
-        """Creates the feature database that will be used to fit the SVR
+        """Creates the feature database that will be used to fit the regressor
         :param dset: a DataFrame with columns [image_name, image_path, score, [img_set]]
                     (not all datasets have the img_set columns, only those that contain
                       groups of distorted images created from the same pristine source)

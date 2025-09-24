@@ -16,7 +16,7 @@ def IqaDataset(Dataset):
     def __init__(self, data: pd.DataFrame, augment=True, crop_pct=0.90, flip_prob=0.5):
         """
         Arguments:
-            data: DataFrame with the annotations (generated with the 'prepare_X' functions).
+            data: DataFrame of dataset X (generated with the 'prepare_X' functions).
             augment: Apply simple augmentations (random crop and/or horizontal flip).
             crop_pct: Percentage of the image to crop. The crop should not be too agressive to ensure
                         most of the image's content is still present
@@ -74,13 +74,13 @@ def split_dataset(dset, test_size=0.2):
     has_img_set = "image_set" in dset.columns
     dset.loc[:, "is_test"] = 0
     if has_img_set:
-        # Some images are similar and come from the same pristine source
+        # Case A: Some images are similar and come from the same pristine source
         img_sets = sorted(dset["image_set"].unique().tolist())
         random.shuffle(img_sets)
         test_sets = img_sets[: int(len(img_sets) * test_size)]
         dset.loc[dset["image_set"].isin(test_sets), "is_test"] = 1
     else:
-        # Every image is a unique sample
+        # Case B: Every image is a unique sample
         idxs = list(range(len(dset)))
         random.shuffle(idxs)
         test_idx = idxs[: int(len(idxs) * test_size)]
@@ -215,6 +215,34 @@ def prepare_nitsiqa(path_nitsiqa):
     return nitsiqa_data
 
 
+def prepare_cidiq(path_cidiq):
+    """Prepares the CID:IQ dataset for training"""
+    path_scores = path_cidiq / "MOS50.mat"
+    path_dataset = path_cidiq / "Images" / "Reproduction"
+
+    # Loading the MOS
+    scores = scipy.io.loadmat(str(path_scores))["MOS50"]
+    scores = scores.squeeze().tolist()
+
+    # There are 690 scores and 690 images. The folders are in numerica order,
+    # so I assume the MOS values follow the same order
+    files = list(path_dataset.glob("**/*.bmp"))
+    img_paths = [str(f) for f in files]
+    img_names = [f.name for f in files]
+    img_sets = [n.split("_")[0] for n in img_names]
+
+    cidiq_data = pd.DataFrame(
+        {
+            "image_path": img_paths,
+            "image_name": img_names,
+            "score": scores,
+            "image_set": img_sets,
+        }
+    )
+
+    return cidiq_data
+
+
 dataset_fn_dict = {
     "koniq10k": prepare_koniq,
     "kadid10k": prepare_kadid,
@@ -222,6 +250,7 @@ dataset_fn_dict = {
     "tid2013": prepare_tid,
     "liveiqa": prepare_liveiqa,
     "nitsiqa": prepare_nitsiqa,
+    "cidiq": prepare_cidiq,
 }
 
 dataset_names = list(dataset_fn_dict.keys())
