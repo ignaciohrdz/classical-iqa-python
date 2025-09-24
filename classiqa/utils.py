@@ -91,8 +91,9 @@ def resolve_model(model_name):
 class ScoreRegressor:
     """This is the simplest regressor. It fits a SVR given some precomputed features"""
 
-    def __init__(self):
+    def __init__(self, epsilon=0.01):
         self.svr_regressor = None
+        self.epsilon = epsilon
 
     def fit(self, feature_db, n_jobs=4):
         """
@@ -116,9 +117,10 @@ class ScoreRegressor:
         X_test = feature_db.loc[test_mask, feature_cols].values
         y_test = feature_db.loc[test_mask, "MOS"].values
 
+        # Using similar ranges to those used by the GM-LOG authors
         params = {
-            "model__C": np.arange(1.0, 10, 0.5),
-            "model__epsilon": np.arange(0.1, 2.0, 0.1),
+            "model__C": np.arange(1, 20000, 250),
+            "model__gamma": np.arange(0.1, 2.0, 0.1),
         }
 
         # In datasets with artificial distortions, we must make sure that all the images
@@ -128,9 +130,9 @@ class ScoreRegressor:
         folds_crossval = cv.split(X_train, y_train, groups=image_sets)
 
         if len(feature_db) > 10000:
-            svr = LinearSVR(max_iter=10000)
+            svr = LinearSVR(max_iter=10000, epsilon=self.epsilon)
         else:
-            svr = SVR(kernel="rbf")
+            svr = SVR(kernel="rbf", epsilon=self.epsilon)
 
         estimator = Pipeline(steps=[("scaler", StandardScaler()), ("model", svr)])
         search = GridSearchCV(
