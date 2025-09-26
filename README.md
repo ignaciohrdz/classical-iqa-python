@@ -59,3 +59,7 @@ I'm using the following datasets:
 - [TID2013](https://qualinet.github.io/databases/image/tampere_image_database_tid2013/)
 - [CSIQ](https://qualinet.github.io/databases/image/categorical_image_quality_csiq_database/)
 - [CID:IQ](https://folk.ntnu.no/mariupe/CIDIQ.zip)
+
+## Results
+
+You can find some results [here](./results.json).
