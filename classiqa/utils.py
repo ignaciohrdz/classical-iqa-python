@@ -40,6 +40,12 @@ def extract_train_args():
         help="Location of the trained SVR models and measures",
     )
     parser.add_argument(
+        "--regressor",
+        type=str,
+        default="mlp",
+        help="Regression model (mlp/svr)",
+    )
+    parser.add_argument(
         "--img_size",
         type=int,
         default=640,
@@ -61,6 +67,12 @@ def extract_test_args():
         "--model",
         type=str,
         help="IQA model name",
+    )
+    parser.add_argument(
+        "--regressor",
+        type=str,
+        default="mlp",
+        help="Regressor type (mlp/svr)",
     )
     parser.add_argument(
         "--dataset",
@@ -87,16 +99,18 @@ def resolve_model(model_name, img_size):
     return estimator
 
 
-def export_results(path_json, dataset, model, metrics):
+def export_results(path_json, dataset, model, regressor, metrics):
     if path_json.exists():
         with open(path_json, "r") as f:
             all_results = json.load(f)
         if dataset not in all_results.keys():
-            all_results[dataset] = {model: metrics}
+            all_results[dataset] = {model: {regressor: metrics}}
         elif model not in all_results[dataset].keys():
-            all_results[dataset][model] = metrics
+            all_results[dataset][model] = {regressor: metrics}
+        elif regressor not in all_results[dataset][model].keys():
+            all_results[dataset][model][regressor] = metrics
     else:
-        all_results = {dataset: {model: metrics}}
+        all_results = {dataset: {model: {regressor: metrics}}}
 
     with open(path_json, "w") as f:
         json.dump(all_results, f)

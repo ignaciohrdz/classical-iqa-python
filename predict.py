@@ -12,14 +12,14 @@ if __name__ == "__main__":
 
     # Debugging
     args.model = "gmlog"
-    args.use_dataset = "liveiqa"
+    args.use_dataset = "tid2013"
 
     path_image_original = Path("images/test_image_orig.jpg")
     path_image_distorted = Path("images/test_image_dist.jpg")
 
     # Loading the feature extractor and the regressor
     dset_name = args.use_dataset
-    path_model = Path(args.path_models) / args.model / args.use_dataset
+    path_model = Path(args.path_models) / args.model / args.regressor / args.use_dataset
     path_extractor_file = path_model / "feature_extractor.pkl"
     path_regressor_file = path_model / "score_regressor.pkl"
 

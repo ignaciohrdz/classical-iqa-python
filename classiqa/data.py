@@ -11,12 +11,23 @@ import albumentations as A
 random.seed(420)
 
 
+# TODO: keep working on this
 def IqaDataset(Dataset):
 
-    def __init__(self, data: pd.DataFrame, augment=True, crop_pct=0.90, flip_prob=0.5):
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        image_paths=None,
+        image_scores=None,
+        augment=True,
+        crop_pct=0.90,
+        flip_prob=0.5,
+    ):
         """
         Arguments:
             data: DataFrame of dataset X (generated with the 'prepare_X' functions).
+            image_paths: list of image paths
+            image_scores: list of image scores (labels)
             augment: Apply simple augmentations (random crop and/or horizontal flip).
             crop_pct: Percentage of the image to crop. The crop should not be too agressive to ensure
                         most of the image's content is still present
@@ -24,20 +35,29 @@ def IqaDataset(Dataset):
         """
         super(Dataset, self).__init__()
         self.data = data
+
+        # Normal usage: pass a DataFrame with paths and labels (scores)
+        # Special usage (cross validation): pass the list of paths and labels and no DataFrame
+        if self.data:
+            image_paths = self.data["image_path"].tolist()
+            image_scores = self.data["image_scores"].tolist()
+        self.image_paths = image_paths
+        self.image_scores = image_scores
+
         self.augment = augment
         self.crop_pct = crop_pct
         self.flip_prob = flip_prob
 
     def __len__(self):
-        return len(self.data)
+        return len(self.image_paths)
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        img_path = self.data.loc[idx, "image_path"]
+        img_path = self.image_paths[idx]
         image = cv2.imread(img_path)
-        score = self.data.iloc[idx, "score"].astype(np.float16)
+        score = self.image_scores[idx].astype(np.float16)
 
         # Optional augmentation
         if self.augment:

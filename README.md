@@ -5,17 +5,21 @@ This repository is a collection of classical IQA methods, long forgotten in favo
 ## Implemented methods
 
 - [SSEQ](#spatial-spectral-entropy-based-quality-sseq-index)
-- [HOSA](#high-orderd-statistics-aggregation-hosa)
-- [LFA](#local-feature-aggregation-lfa)
 - [GM-LOG](#gradient-magnitude-and-laplacian-features-gm-log)
-- [SOM](#semantic-obviousness-metric-som)
 - [CORNIA](#codebook-representation-for-no-reference-image-assessment-cornia)
+- [LFA](#local-feature-aggregation-lfa)
+- [HOSA](#high-orderd-statistics-aggregation-hosa)
+- [SOM](#semantic-obviousness-metric-som)
 
 ### Spatial-Spectral Entropy-based Quality (SSEQ) index
 
 This is my implementation of the **SSEQ index**. The full details of SSEQ can be found in the paper: [No-reference image quality assessment based on spatial and spectral entropies (Liu et al.)](https://doi.org/10.1016/j.image.2014.06.006). The original MATLAB implementation is [here](https://github.com/utlive/SSEQ). 
 
 I wasn't able to find a fully implemented Python version of this index, so I decided to use [Aca4peop's code](https://github.com/Aca4peop/SSEQ-Python) as a starting point and then add my own modifications. The main highlight of this version is the vectorized implementation of patch spatial entropy and DCT for spectral entropy (more info [here](https://eng.libretexts.org/Bookshelves/Electrical_Engineering/Signal_Processing_and_Modeling/Information_and_Entropy_(Penfield)/03%3A_Compression/3.08%3A_Detail-_2-D_Discrete_Cosine_Transformation/3.8.02%3A_Discrete_Cosine_Transformation))
+
+### Gradient Magnitude and Laplacian features (GM-LOG)
+
+This measure was proposed in [Blind Image Quality Assessment Using Joint Statistics of Gradient Magnitude and Laplacian Features (Xue et al., 2014)](https://ieeexplore.ieee.org/abstract/document/6894197). The authors shared a [MATLAB implementation](http://www4.comp.polyu.edu.hk/~cslzhang/code/GM-LOG-BIQA.zip) that I used as a starting point.
 
 ### High Orderd Statistics Aggregation (HOSA)
 
@@ -30,10 +34,6 @@ Order Statistics Aggregation (Xu et al.)](https://ieeexplore.ieee.org/document/7
 
 After some reading, I found another measure, LFA, that was proposed by the same authors one year before HOSA in [Local Feature Aggregation for Blind Image Quality Assessment (Xu et al. 2015)](https://ieeexplore.ieee.org/abstract/document/7457832), and it can be considered its precursor. As it follows a similar approach (generating a codebook and computing some metrics with each cluster's assignments), I've also implemented it with the same tricks I used for HOSA.
 
-### Gradient Magnitude and Laplacian features (GM-LOG)
-
-This measure was proposed in [Blind Image Quality Assessment Using Joint Statistics of Gradient Magnitude and Laplacian Features (Xue et al., 2014)](https://ieeexplore.ieee.org/abstract/document/6894197). The authors shared a [MATLAB implementation](http://www4.comp.polyu.edu.hk/~cslzhang/code/GM-LOG-BIQA.zip) that I used as a starting point.
-
 ### Semantic Obviousness Metric (SOM)
 
 This one was presented in [SOM: Semantic Obviousness Metric for Image Quality Assessment (Zhang et al., 2015)](https://openaccess.thecvf.com/content_cvpr_2015/papers/Zhang_SOM_Semantic_Obviousness_2015_CVPR_paper.pdf). This measure uses the BING model for saliency detection. You can find the BING model files in [this repo](https://github.com/methylDragon/opencv-python-reference/tree/master/Resources/Models/bing_objectness_model).
@@ -44,11 +44,11 @@ Moreover, the OpenCV implementation of the BING object-like detector doesn't see
 
 ### Codebook Representation for No-Reference Image Assessment (CORNIA)
 
-CORNIA is a very famous no-reference IQA measure that also makes use of visual codebooks. It was presented in [Unsupervised Feature Learning Framework for No-reference Image Quality Assessment (Ye et al., 2012)](https://ieeexplore.ieee.org/document/6247789) and, after reading the SOM paper more carefully, I discovered it was almost identical to CORNIA, so I've decided to implement it too.
+CORNIA is a very famous no-reference IQA measure that also makes use of visual codebooks. It was presented in [Unsupervised Feature Learning Framework for No-reference Image Quality Assessment (Ye et al., 2012)](https://ieeexplore.ieee.org/document/6247789) and, after reading the SOM paper more carefully, I discovered it was almost identical to CORNIA, so I've decided to implement it too. In fact, CORNIA was the starting point for many codebook-based methods.
 
 ## How to train an IQA model
 
-For all these models I'm following the same approach: splitting every dataset into a training and a test set. I use the training sets with K-fold cross-validation to get the best parameters for each SVR model.
+For all these models I'm following the same approach: splitting every dataset into a training and a test set. I use the training sets with K-fold cross-validation to get the best parameters for each regression model. As of today, it's possible to fit an SVR or an MLP.
 
 I'm using the following datasets:
 
