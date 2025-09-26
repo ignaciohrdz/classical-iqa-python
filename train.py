@@ -1,6 +1,11 @@
 """Train a SVR on IQA datasets"""
 
-from classiqa.utils import extract_train_args, resolve_model, ScoreRegressor
+from classiqa.utils import (
+    extract_train_args,
+    resolve_model,
+    export_results,
+)
+from classiqa.regression import ScoreRegressor
 from classiqa.data import dataset_fn_dict
 import pandas as pd
 from pathlib import Path
@@ -10,15 +15,16 @@ if __name__ == "__main__":
     args = extract_train_args()
 
     args.path_datasets = "/home/ignaciohmon/projects/datasets/iqa_datasets"
-    args.use_dataset = "liveiqa"
+    args.use_dataset = "tid2013"
     args.model = "sseq"
     args.overwrite = True
 
     # Define the score without a regressor to obtain the features
-    feature_extractor = resolve_model(args.model)
+    feature_extractor = resolve_model(args.model, args.img_size)
     n_features = feature_extractor.n_features
     path_model = Path(args.path_models) / args.model / args.use_dataset
     path_model.mkdir(exist_ok=True, parents=True)
+    print(f"Training a {args.model} model on {args.use_dataset}")
 
     path_dataset = Path(args.path_datasets) / args.use_dataset
     path_feature_db = path_dataset / f"feature_db_{args.model}.csv"
@@ -44,3 +50,7 @@ if __name__ == "__main__":
     # Exporting the model
     feature_extractor.export(path_model)
     regressor.export(path_model)
+
+    # Saving the results
+    path_json = Path("results.json")
+    export_results(path_json, args.use_dataset, args.model, corr_metrics)

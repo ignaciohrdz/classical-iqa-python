@@ -24,7 +24,6 @@ class GMLOG:
         bins_log=10,
         epsilon=0.25,
         alpha=0.0001,
-        test_size=0.3,
     ):
 
         self.img_size = img_size
@@ -34,21 +33,13 @@ class GMLOG:
         self.epsilon = epsilon
         self.alpha = alpha
         self.n_features = 2 * (bins_gm + bins_log)
-        self.test_size = test_size
 
         # Using the author's settings
         self.kernel_size = int(2 * np.ceil(3 * self.sigma) + 1 + 2)
-        self.gaussian_deriv_x, self.gaussian_deriv_y = (
-            self.make_gaussian_first_derivative(self.kernel_size, self.sigma)
-        )
-        self.log_kernel = self.make_laplacian_of_gaussian(self.kernel_size, self.sigma)
 
         # Kernel for Joint Adaptive Normalization (JAN)
         self.sigma_jan = 2 * self.sigma
         self.kernel_size_jan = int(2 * np.ceil(3 * self.sigma_jan) + 1)
-        self.gaussian_kernel = self.make_gaussian_kernel(
-            self.kernel_size_jan, self.sigma_jan
-        )
 
     def prepare_input(self, x):
         """Initial conversion to grayscale and resizing"""
@@ -65,68 +56,45 @@ class GMLOG:
             )
         return x_gray
 
-    def make_gaussian_kernel(self, n, sigma):
-        """Creates a normalised Gaussian kernel (as in the paper)"""
-        Y, X = np.indices((n, n)) - int(n / 2)
-        gaussian_kernel = (1 / (2 * np.pi * sigma**2)) * np.exp(
-            -(X**2 + Y**2) / (2 * sigma**2)
-        )
-        gaussian_kernel = gaussian_kernel / np.sum(np.abs(gaussian_kernel))
-        return gaussian_kernel
-
-    def make_gaussian_first_derivative(self, n, sigma):
-        """Creates the Gaussian partial derivative kernels (as in the paper)"""
-        Y, X = np.indices((n, n)) - int(n / 2)
-        gaussian_kernel = (1 / (2 * np.pi * sigma**2)) * np.exp(
-            -(X**2 + Y**2) / (2 * sigma**2)
-        )
-
-        # In the paper the kernels are not normalised)
-        vertical_kernel = gaussian_kernel * (-X / sigma**2)
-        horizontal_kernel = gaussian_kernel * (-Y / sigma**2)
-        # vertical_kernel = vertical_kernel / np.sum(np.abs(vertical_kernel))
-        # horizontal_kernel = horizontal_kernel / np.sum(np.abs(horizontal_kernel))
-
-        return vertical_kernel, horizontal_kernel
-
-    def make_laplacian_of_gaussian(self, n, sigma):
-        """Creates the Laplacian of Gaussian kernel (as in the paper)"""
-        Y, X = np.indices((n, n)) - int(n / 2)
-        log_kernel = (1 / (2 * np.pi * sigma**2)) * np.exp(
-            -(X**2 + Y**2) / (2 * sigma**2)
-        )
-
-        # In the paper the kernel is not normalised
-        log_kernel *= ((X**2) + (Y**2) - (2 * sigma**2)) / sigma**4
-        # log_kernel /= np.sum(np.abs(log_kernel))
-
-        return log_kernel
-
     def extract_features(self, x_gray):
         """Computes the GM LOG features"""
 
         # Computation of Gradient Magnitude and Laplacian of Gaussian channels
-        grad_x = cv2.filter2D(src=x_gray, ddepth=-1, kernel=self.gaussian_deriv_x)
-        grad_y = cv2.filter2D(src=x_gray, ddepth=-1, kernel=self.gaussian_deriv_y)
-        g_i = np.sqrt(grad_x**2 + grad_y**2)
-        l_i = np.abs(cv2.filter2D(src=x_gray, ddepth=-1, kernel=self.log_kernel))
+        grad_x = cv2.Sobel(x_gray, cv2.CV_64F, 1, 0, self.kernel_size)
+        grad_y = cv2.Sobel(x_gray, cv2.CV_64F, 0, 1, self.kernel_size)
+        gm_i = cv2.magnitude(grad_x, grad_y)
+
+        l_i = cv2.GaussianBlur(
+            x_gray,
+            ksize=(self.kernel_size, self.kernel_size),
+            sigmaX=self.sigma,
+            sigmaY=self.sigma,
+        )
+        l_i = cv2.Laplacian(l_i, cv2.CV_64F, ksize=self.kernel_size)
+        l_i = np.absolute(l_i)
 
         # Joint Adaptive Normalisation (JAN)
-        f_i = np.sqrt(g_i**2 + l_i**2)
+        f_i = np.sqrt(gm_i**2 + l_i**2)
         n_i = np.sqrt(
-            cv2.filter2D(
-                src=(f_i**2).astype(np.uint8),
-                ddepth=-1,
-                kernel=self.gaussian_kernel,
+            cv2.GaussianBlur(
+                f_i**2,
+                ksize=(self.kernel_size_jan, self.kernel_size_jan),
+                sigmaX=self.sigma_jan,
+                sigmaY=self.sigma_jan,
             )
         )
-        g_i = g_i / (n_i + self.epsilon)
+        gm_i = gm_i / (n_i + self.epsilon)
         l_i = l_i / (n_i + self.epsilon)
+
+        # cv2.imshow("Image", x_gray)
+        # cv2.imshow("Gradient magnitude", gm_i)
+        # cv2.imshow("Laplacian of Gaussian", l_i)
+        # cv2.waitKey()
 
         # Statitical feature description
         # Normalised histogram
         k, _, _ = np.histogram2d(
-            g_i.flatten(),
+            gm_i.flatten(),
             l_i.flatten(),
             bins=[self.bins_gm, self.bins_log],
         )
@@ -143,7 +111,7 @@ class GMLOG:
         features = n_g.tolist() + n_l.tolist() + q_g.tolist() + q_l.tolist()
         return features
 
-    def generate_feature_db(self, dset):
+    def generate_feature_db(self, dset, test_size=0.3):
         """Creates the feature database that will be used to fit the SVR
         :param dset: a DataFrame with columns [image_name, image_path, score, [img_set]]
                     (not all datasets have the img_set columns, only those that contain
@@ -152,7 +120,7 @@ class GMLOG:
 
         # Creating the train/test splits
         if "is_test" not in dset.columns:
-            dset = split_dataset(dset, self.test_size)
+            dset = split_dataset(dset, test_size)
 
         feature_db = []
         for i, row in enumerate(dset.to_dict("records")):

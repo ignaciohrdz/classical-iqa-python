@@ -11,7 +11,7 @@ if __name__ == "__main__":
     args = extract_test_args()
 
     # Debugging
-    args.model = "sseq"
+    args.model = "gmlog"
     args.use_dataset = "liveiqa"
 
     path_image_original = Path("images/test_image_orig.jpg")
