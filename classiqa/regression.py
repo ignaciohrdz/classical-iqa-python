@@ -6,18 +6,19 @@ from sklearn.metrics import make_scorer
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import GridSearchCV, GroupKFold
 from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 import pickle
-from .data import IqaDataset, split_dataset
-import itertools
 
 
 class SimpleSVR:
     """This is the simplest regressor. It fits a SVR given some precomputed features"""
 
-    def __init__(self, epsilon=0.0, n_folds=5):
+    def __init__(self, epsilon=0.0, n_folds=5, pca_components=0):
         self.svr_regressor = None
         self.n_folds = n_folds
         self.epsilon = epsilon
+        self.pca_components = pca_components
+        self.pca = None
 
     def fit(self, feature_db, n_jobs=4):
         """
@@ -40,6 +41,12 @@ class SimpleSVR:
 
         X_test = feature_db.loc[test_mask, feature_cols].values
         y_test = feature_db.loc[test_mask, "MOS"].values
+
+        # Dimensionality reduction (for methods like LFA)
+        if self.pca_components > 0:
+            self.pca = PCA(n_components=self.pca_components)
+            X_train = self.pca.fit_transform(X_train)
+            X_test = self.pca.transform(X_test)
 
         # Using similar ranges to those used by the GM-LOG authors
         params = {
@@ -110,6 +117,8 @@ class SimpleSVR:
 
     def predict_score(self, f):
         """Predicts the score from a set of features (f)"""
+        if self.pca_components > 0:
+            f = self.pca.transform(f)
         score = self.svr_regressor.predict(f)
         score = self.output_scaler.inverse_transform(score.reshape(-1, 1)).ravel()
         return score
@@ -124,9 +133,11 @@ class SimpleSVR:
 class SimpleMLP:
     """This is the simplest regressor. It fits an MLP given some precomputed features"""
 
-    def __init__(self, n_folds=5):
+    def __init__(self, n_folds=5, pca_components=0):
         self.mlp_regressor = None
         self.n_folds = n_folds
+        self.pca_components = pca_components
+        self.pca = None
 
     def fit(self, feature_db, n_jobs=4):
         """
@@ -150,11 +161,25 @@ class SimpleMLP:
         X_test = feature_db.loc[test_mask, feature_cols].values
         y_test = feature_db.loc[test_mask, "MOS"].values
 
+        # Dimensionality reduction
+        if self.pca_components > 0:
+            self.pca = PCA(n_components=self.pca_components)
+            X_train = self.pca.fit_transform(X_train)
+            X_test = self.pca.transform(X_test)
+
         # Using similar ranges to those used by the GM-LOG authors
         params = {
-            "model__hidden_layer_sizes": [(64), (128, 64), (256, 128, 64)],
-            "model__activation": ["logistic", "tanh", "reul"],
-            "model__learning_rate": ["constant", "invscaling", "adaptive"],
+            "model__hidden_layer_sizes": [
+                (32),
+                (64),
+                (128),
+                (256),
+                (256, 128),
+                (128, 64),
+                (64, 32),
+            ],
+            "model__activation": ["logistic", "relu"],
+            "model__learning_rate": ["invscaling", "adaptive"],
             "model__learning_rate_init": [pow(10.0, i) for i in np.arange(-5, 0)],
         }
 
@@ -205,6 +230,8 @@ class SimpleMLP:
 
     def predict_score(self, f):
         """Predicts the score from a set of features (f)"""
+        if self.pca_components > 0:
+            f = self.pca.transform(f)
         score = self.mlp_regressor.predict(f)
         score = self.output_scaler.inverse_transform(score.reshape(-1, 1)).ravel()
         return score

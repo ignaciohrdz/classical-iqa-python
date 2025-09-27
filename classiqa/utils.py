@@ -3,7 +3,6 @@ from classiqa.data import dataset_names
 from classiqa.sseq import SSEQ
 from classiqa.gmlog import GMLOG
 from classiqa.codebook import CORNIA, HOSA, LFA, SOM
-
 import json
 
 MODEL_DICT = {

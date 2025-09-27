@@ -2,86 +2,10 @@ import pandas as pd
 from pathlib import Path
 import scipy
 import random
-import torch
-from torch.utils.data import Dataset, DataLoader
 import cv2
 import numpy as np
-import albumentations as A
 
 random.seed(420)
-
-
-# TODO: keep working on this
-def IqaDataset(Dataset):
-
-    def __init__(
-        self,
-        data: pd.DataFrame,
-        image_paths=None,
-        image_scores=None,
-        augment=True,
-        crop_pct=0.90,
-        flip_prob=0.5,
-    ):
-        """
-        Arguments:
-            data: DataFrame of dataset X (generated with the 'prepare_X' functions).
-            image_paths: list of image paths
-            image_scores: list of image scores (labels)
-            augment: Apply simple augmentations (random crop and/or horizontal flip).
-            crop_pct: Percentage of the image to crop. The crop should not be too agressive to ensure
-                        most of the image's content is still present
-            flip_prob: random horizontal flip probability
-        """
-        super(Dataset, self).__init__()
-        self.data = data
-
-        # Normal usage: pass a DataFrame with paths and labels (scores)
-        # Special usage (cross validation): pass the list of paths and labels and no DataFrame
-        if self.data:
-            image_paths = self.data["image_path"].tolist()
-            image_scores = self.data["image_scores"].tolist()
-        self.image_paths = image_paths
-        self.image_scores = image_scores
-
-        self.augment = augment
-        self.crop_pct = crop_pct
-        self.flip_prob = flip_prob
-
-    def __len__(self):
-        return len(self.image_paths)
-
-    def __getitem__(self, idx):
-        if torch.is_tensor(idx):
-            idx = idx.tolist()
-
-        img_path = self.image_paths[idx]
-        image = cv2.imread(img_path)
-        score = self.image_scores[idx].astype(np.float16)
-
-        # Optional augmentation
-        if self.augment:
-            # Random crop
-            img_h, img_w = image.shape[:2]
-            crop_h, crop_w = [int(d * self.crop_pct) for d in image.shape[:2]]
-
-            w_start = random.randint(0, img_w - crop_w)
-            h_start = random.randint(0, img_h - crop_h)
-
-            w_end = w_start + crop_w
-            h_end = h_start + crop_h
-            image = image[h_start:h_end, w_start:w_end, :]
-
-            # Random flip
-            if random.random() >= self.flip_prob:
-                image = cv2.flip(image, 1)
-
-        sample = {"image": image, "score": score}
-
-        if self.transform:
-            sample = self.transform(sample)
-
-        return sample
 
 
 def split_dataset(dset, test_size=0.2):
@@ -156,6 +80,97 @@ def prepare_csiq(path_csiq: Path):
         except KeyError:
             print("Score not found for this CSIQ image: ", f.name)
     return csiq_data
+
+
+def prepare_csiq_cornia(path_csiq: Path):
+    """Prepares the CSIQ dataset with some additional distortions
+    as in the CORNIA paper: https://ieeexplore.ieee.org/document/6247789"""
+
+    # The base dataset
+    csiq_data = prepare_csiq(path_csiq)
+
+    # Expanding the dataset with more distortions
+    extra_dataset = []
+    path_src = path_csiq / "src_imgs"
+    path_extension = path_csiq / "cornia_extension"
+
+    # Salt & pepper noise
+    # Based on: https://stackoverflow.com/a/27342545
+    path_sp = path_extension / "salt_pepper"
+    path_sp.mkdir(exist_ok=True, parents=True)
+    for i, sp_thresh in enumerate([5, 15, 20]):
+        for f in path_src.glob("*"):
+            # Loading and distorting the source image
+            img = cv2.imread(str(f))
+            noise = np.random.randint(0, 255, size=img.shape[:2])
+            img[noise < sp_thresh, :] = 0
+            img[noise > 255 - sp_thresh, :] = 255
+
+            # Saving the distorted image
+            dst_name = f"{f.stem}.SP.{i+1}.png"
+            path_dst = path_sp / dst_name
+            cv2.imwrite(str(path_dst), img)
+            extra_dataset.append(
+                {
+                    "image_path": str(path_dst),
+                    "image_name": dst_name,
+                    "score": -1,
+                    "image_set": f.stem,
+                }
+            )
+
+    # Poisson noise
+    # https://stackoverflow.com/a/36331042
+    path_poisson = path_extension / "poisson"
+    path_poisson.mkdir(exist_ok=True, parents=True)
+    for i, scale in enumerate([20, 40, 60]):
+        for f in path_src.glob("*"):
+            # Loading and distorting the source image
+            img = cv2.imread(str(f)) / 255.0
+            noise = (np.random.poisson(img * scale) / scale) * 255
+            noise = noise.astype(np.uint8)
+
+            # Saving the distorted image
+            dst_name = f"{f.stem}.POISSON.{i+1}.png"
+            path_dst = path_poisson / dst_name
+            cv2.imwrite(str(path_dst), noise)
+            extra_dataset.append(
+                {
+                    "image_path": str(path_dst),
+                    "image_name": dst_name,
+                    "score": -1,
+                    "image_set": f.stem,
+                }
+            )
+
+    # Speckle noise
+    # https://www.geeksforgeeks.org/computer-vision/noise-tolerance-in-opencv/
+    path_speckle = path_extension / "speckle"
+    path_speckle.mkdir(exist_ok=True, parents=True)
+    for f in path_src.glob("*"):
+        # Loading and distorting the source image
+        img = cv2.imread(str(f))
+        noise = np.random.normal(0, 1, img.shape).astype(np.float32)
+        img = img + img * noise
+        img = np.clip(img, 0, 255).astype(np.uint8)
+
+        # Saving the distorted image
+        dst_name = f"{f.stem}.SPECKLE.1.png"
+        path_dst = path_speckle / dst_name
+        cv2.imwrite(str(path_dst), img)
+        extra_dataset.append(
+            {
+                "image_path": str(path_dst),
+                "image_name": dst_name,
+                "score": -1,
+                "image_set": f.stem,
+            }
+        )
+
+    extra_dataset = pd.DataFrame(extra_dataset)
+    dataset = pd.concat([csiq_data, extra_dataset], ignore_index=True)
+
+    return dataset
 
 
 def prepare_tid(path_tid: Path):
@@ -263,14 +278,18 @@ def prepare_cidiq(path_cidiq):
     return cidiq_data
 
 
+# TODO: Get the CID2013 dataset
+
+
 dataset_fn_dict = {
     "koniq10k": prepare_koniq,
     "kadid10k": prepare_kadid,
+    "cidiq": prepare_cidiq,
     "csiq": prepare_csiq,
+    "csiq+": prepare_csiq_cornia,
     "tid2013": prepare_tid,
     "liveiqa": prepare_liveiqa,
     "nitsiqa": prepare_nitsiqa,
-    "cidiq": prepare_cidiq,
 }
 
 dataset_names = list(dataset_fn_dict.keys())

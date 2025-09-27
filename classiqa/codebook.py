@@ -9,16 +9,17 @@ import random
 from .data import split_dataset
 from .processing import zca_whitening
 from pathlib import Path
-from sklearn.svm import SVR
-from sklearn.metrics import make_scorer
-from sklearn.pipeline import make_pipeline
-from sklearn.model_selection import GridSearchCV, GroupKFold
-from sklearn.preprocessing import StandardScaler
-from .metrics import lcc, srocc
 import os
 import pickle
+import matplotlib.pyplot as plt
 
 random.seed(420)
+
+
+# TODO: Complete this
+def plot_codebook(codebook, path_save):
+    for word in codebook:
+        word = word.reshape(7, 7).astype(np.float32)
 
 
 class CORNIA:
@@ -35,7 +36,6 @@ class CORNIA:
         use_minibatch=True,
         eps=1e-6,
         codebook=None,
-        svr_regressor=None,
     ):
         self.img_size = img_size
         self.patch_size = patch_size
@@ -46,7 +46,6 @@ class CORNIA:
         self.eps = eps
 
         self.n_features = self.num_patches
-        self.svr_regressor = svr_regressor
 
         # We set stride to half the patch size to allow some overlapping
         self.patch_stride = self.patch_size // 2
@@ -165,11 +164,7 @@ class CORNIA:
         encoding_neg = np.maximum(-dot_similarity, 0)
         coefs = np.hstack((encoding_pos, encoding_neg))
 
-        # Max pooling on the columns
-        # This is different from what the authors say (max of each column
-        # instead of each row), but it wouldn't make any sense otherwise
-        # Because the lenght of the feature vector may be different for each image
-        # if there weren't enough patches to sample
+        # Max pooling on the columns (codeword-wise)
         coefs = np.max(coefs, axis=1)
 
         return np.float16(coefs)
@@ -192,7 +187,8 @@ class CORNIA:
             train_dset = dset.loc[dset["is_test"] == 0, :].copy()
             self.generate_codebook(train_dset)
 
-        # Then, we compute the main features (m, v, s) for every image
+        # Then, we compute the features for every image
+        # TODO: Use np.memmap to handle large dataset?
         feature_db = []
         for i, row in enumerate(dset.to_dict("records")):
             im_name = row["image_name"]
@@ -212,72 +208,14 @@ class CORNIA:
 
         return feature_db
 
-    def fit(self, feature_db, n_jobs=4):
-        """
-        Fit an SVR model to a given dset of ftrs
-        :param feature_db: dataframe with the columns:
-                    - image name
-                    - feature i ... feature N
-                    - MOS
-                    - test split indicator
-        :param n_jobs: number of threads for GridSearchCV
-        """
-
-        # Making the splits
-        train_mask = feature_db["is_test"] == 0
-        test_mask = feature_db["is_test"] == 1
-        feature_cols = feature_db.columns[1:-3]
-
-        X_train = feature_db.loc[train_mask, feature_cols].values
-        y_train = feature_db.loc[train_mask, "MOS"].values
-
-        X_test = feature_db.loc[test_mask, feature_cols].values
-        y_test = feature_db.loc[test_mask, "MOS"].values
-
-        # X_train = np.float16(X_train)
-        # X_test = np.float16(X_test)
-
-        params = {
-            "svr__C": np.arange(5, 10, 0.5),
-            "svr__epsilon": np.arange(0.25, 2.0, 0.25),
-        }
-
-        # The authors used a linear kernel
-        search = GridSearchCV(
-            estimator=make_pipeline(StandardScaler(), SVR(kernel="linear")),
-            param_grid=params,
-            cv=5,
-            n_jobs=n_jobs,
-            verbose=1,
-            scoring={"LCC": make_scorer(lcc), "SROCC": make_scorer(srocc)},
-            error_score=0,
-            refit="SROCC",
-        )
-
-        search.fit(X_train, y_train)
-        self.svr_regressor = search.best_estimator_
-        print(self.svr_regressor[1].C, self.svr_regressor[1].epsilon)
-
-        # Test metrics
-        y_pred = self.svr_regressor.predict(X_test)
-        test_results = {
-            "LCC": lcc(y_test, y_pred),
-            "SROCC": srocc(y_test, y_pred),
-        }
-
-        return search.cv_results_, test_results
-
-    def predict_score(self, f):
-        """Predicts the score from a set of ftrs"""
-        score = self.svr_regressor.predict(f)
-        return score
-
     def export(self, path_save):
         # Export the codebook and the codebook stats
-        print("Exporting the CORNIA data to: ", path_save)
-        np.savetxt(path_save / "cornia_codebook.csv", self.codebook, delimiter=",")
+        path_codebook = path_save / f"{self.__class__.__name__}_codebook"
+        np.savetxt(str(path_codebook) + ".csv", self.codebook, delimiter=",")
 
-        # Exporting the model
+        # Export a figure with the centroids
+        plot_codebook(self.codebook, str(path_codebook) + ".png")
+
         path_pkl = path_save / "feature_extractor.pkl"
         print("Saving feature extractor to ", str(path_pkl))
         with open(path_pkl, "wb") as f:
@@ -288,30 +226,25 @@ class CORNIA:
         ftrs = self.extract_features(x_gray)
         ftrs = np.array(ftrs)
 
-        # If we have loaded a SVR model, we predict the IQA score
-        # The features are returned otherwise
-        if self.svr_regressor is not None:
-            return self.predict_score(ftrs.reshape(1, -1))
-        else:
-            return ftrs
+        return ftrs
 
 
-class HOSA:
-    """Blind Image Quality Assessment Based on High Order Statistics Aggregation
-    by Xu et al. (https://ieeexplore.ieee.org/document/7501619)"""
+class LFA:
+    """Before HOSA, the authors developed LFA
+    "Local feature aggregation for blind image quality assessment"
+    https://ieeexplore.ieee.org/abstract/document/7457832"""
 
     def __init__(
         self,
+        img_size=512,
         patch_size=7,
+        num_patches=5000,
         codebook_size=100,
         use_minibatch=True,
-        local_ftrs_frac=0.75,
         r=5,
         alpha=0.2,
         beta=0.05,
-        img_size=512,
         eps=10,
-        svr_regressor=None,
     ):
         self.img_size = img_size
         self.patch_size = patch_size
@@ -319,10 +252,9 @@ class HOSA:
 
         # Parameters related to the K nearest codewords
         self.codebook = None
-        self.codebook_stats = None
         self.codebook_size = codebook_size
         self.use_minibatch = use_minibatch
-        self.local_ftrs_frac = local_ftrs_frac
+        self.num_patches = num_patches
         self.r = r
         self.alpha = alpha
         self.beta = beta
@@ -331,8 +263,7 @@ class HOSA:
         # For normalization
         self.eps = eps
 
-        self.n_features = 3 * self.n_dims * self.codebook_size
-        self.svr_regressor = svr_regressor
+        self.n_features = self.n_dims * self.codebook_size
 
     def crop_input(self, x):
         """We make sure the image is divisible into NxN tiles (N = patch_size)
@@ -358,18 +289,6 @@ class HOSA:
                 interpolation=cv2.INTER_CUBIC,
             )
         return x_gray
-
-    def __call__(self, x):
-        x_gray = self.prepare_input(x)
-        ftrs = self.extract_features(x_gray)
-        ftrs = np.array(ftrs)
-
-        # If we have loaded a SVR model, we predict the IQA score
-        # The features are returned otherwise
-        if self.svr_regressor is not None:
-            return self.predict_score(ftrs.reshape(1, -1))
-        else:
-            return ftrs
 
     def extract_local_features(self, x_gray):
         """Extracts the local features of an image. Each feature comes
@@ -399,15 +318,180 @@ class HOSA:
         # Using float16 is more memory-efficient
         local_ftrs = np.float16(local_ftrs)
 
-        # I we're running HOSA/LFA on limited hardware,
-        # we can't have all features because it takes too much RAM
-        n_sample = int(self.local_ftrs_frac * local_ftrs.shape[0])
         idxs = list(range(local_ftrs.shape[0]))
         random.shuffle(idxs)
-        idxs = idxs[:n_sample]
+        idxs = idxs[: self.num_patches]
         local_ftrs = local_ftrs[idxs]
 
         return local_ftrs
+
+    def generate_codebook(self, dset):
+        """This method is much simpler than HOSA
+        (no high-order statistics, just the cluster centroids)"""
+
+        all_ftrs = []
+        paths = dset["image_path"].values
+        for i, im_path in enumerate(paths):
+            im_name = Path(im_path).name
+            print(f"[Codebook][{i+1}/{len(dset)}]: Processing {im_name}")
+            img = cv2.imread(im_path)
+            img_gray = self.prepare_input(img)
+            local_ftrs = self.extract_local_features(img_gray)
+            all_ftrs.append(local_ftrs)
+        all_ftrs = np.concatenate(all_ftrs, axis=0)
+
+        # Clustering
+        print(
+            f"[Codebook]: Generating {self.codebook_size}-word codebook"
+            f"(from {len(all_ftrs)} samples)"
+        )
+        if self.use_minibatch:
+            kmeans = MiniBatchKMeans(
+                n_clusters=self.codebook_size,
+                random_state=420,
+                batch_size=1024 * os.cpu_count(),
+            )
+        else:
+            kmeans = KMeans(n_clusters=self.codebook_size, random_state=420)
+        kmeans.fit(all_ftrs)
+        self.codebook = np.float16(kmeans.cluster_centers_)  # [100 x D]
+        del all_ftrs
+
+    def extract_features(self, x_gray):
+        """Extracts the local features of an image, for which
+        the r-nearest words from the main visual codebook are found.
+        Once the nearest clusters are found, we compute the features"""
+
+        local_ftrs = self.extract_local_features(x_gray)  # [M x D]
+
+        # Computing the distance to the 100-word codebook
+        # (codebook is [100 x D])
+        norms = cdist(local_ftrs, self.codebook, "euclidean")  # [M x 100]
+        rnn_idx = np.argsort(norms, axis=-1)[:, : self.r]  # [M x r]
+
+        # Computing the weights
+        norms_sq = norms**2
+        weights = np.exp(-self.beta * norms_sq)  # [M x 100]
+
+        # The statistics of all cluster assigments
+        v = np.zeros_like(self.codebook)  # [100 x D]
+
+        for i in range(self.codebook_size):
+            # Say we have N features assigned to cluster i
+            i_mask = (rnn_idx == i).sum(axis=1) > 0  # [M x 1]
+            if sum(i_mask) > 0:
+                cls_i_ftrs = local_ftrs[i_mask, :]  # [N x D]
+                cls_i_mean = self.codebook[i, :]  # [1 x D]
+                cls_i_weights = weights[i_mask, i]  # [N x 1]
+                cls_i_diff = cls_i_ftrs - cls_i_mean  # [N x D]
+                cls_i_v = np.dot(cls_i_weights.T, cls_i_diff)  # [1 x D]
+                v[i] = cls_i_v
+
+        # Convert to a single vector
+        out = np.reshape(v, (1, -1))
+
+        # Element-wise signed power normalization + L2 normalization
+        out = np.sign(out) * np.abs(out) ** self.alpha
+        out = out / np.linalg.norm(out)
+
+        return np.float16(np.squeeze(out))
+
+    def generate_feature_db(self, dset, test_size=0.3):
+        """Creates the feature database that will be used to fit the SVR
+        :param dset: a DataFrame with columns [image_name, image_path, score, [img_set]]
+                    (not all datasets have the img_set columns, only those that contain
+                      groups of distorted images created from the same pristine source)
+        :param test_size: percentage of images for the test set
+        """
+
+        # Creating the train/test splits
+        if "is_test" not in dset.columns:
+            dset = split_dataset(dset, test_size)
+
+        # We first create the codebook
+        if self.codebook is None:
+            print("Generating the visual codebook with the training set")
+            train_dset = dset.loc[dset["is_test"] == 0, :].copy()
+            self.generate_codebook(train_dset)
+
+        # Then, we compute the main features (m, v, s) for every image
+        # TODO: Use np.memmap to handle large dataset?
+        feature_db = []
+        for i, row in enumerate(dset.to_dict("records")):
+            im_name = row["image_name"]
+            im_path = row["image_path"]
+            im_set = row["image_set"]
+            im_score = row["score"]
+            im_split = row["is_test"]
+            print(f"[Features][{i+1}/{len(dset)}]: Processing {im_name}")
+            img = cv2.imread(im_path)
+            img_gray = self.prepare_input(img)
+            ftrs = list(self.extract_features(img_gray))
+            feature_db.append([im_name] + ftrs + [im_score, im_split, im_set])
+
+        feature_cols = list(range(1, self.n_features + 1))
+        db_cols = ["image_name"] + feature_cols + ["MOS", "is_test", "image_set"]
+        feature_db = pd.DataFrame(feature_db, columns=db_cols)
+
+        return feature_db
+
+    def export(self, path_save):
+        # Export the codebook
+        path_codebook = path_save / f"{self.__class__.__name__}_codebook"
+        np.savetxt(str(path_codebook) + ".csv", self.codebook, delimiter=",")
+
+        # TODO: Export a figure with the centroids
+        plot_codebook(self.codebook, str(path_codebook) + ".png")
+
+        # Exporting the model
+        path_pkl = path_save / "feature_extractor.pkl"
+        print("Saving feature extractor to ", str(path_pkl))
+        with open(path_pkl, "wb") as f:
+            pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+class HOSA(LFA):
+    """Blind Image Quality Assessment Based on High Order Statistics Aggregation
+    by Xu et al. (https://ieeexplore.ieee.org/document/7501619)"""
+
+    def __init__(
+        self,
+        img_size=512,
+        patch_size=7,
+        num_patches=5000,
+        codebook_size=100,
+        use_minibatch=True,
+        r=5,
+        alpha=0.2,
+        beta=0.05,
+        eps=10,
+    ):
+        self.img_size = img_size
+        self.patch_size = patch_size
+        self.unfold = nn.Unfold(kernel_size=self.patch_size, stride=self.patch_size)
+
+        # Parameters related to the K nearest codewords
+        self.codebook = None
+        self.codebook_stats = None
+        self.codebook_size = codebook_size
+        self.use_minibatch = use_minibatch
+        self.num_patches = num_patches
+        self.r = r
+        self.alpha = alpha
+        self.beta = beta
+        self.n_dims = self.patch_size**2
+
+        # For normalization
+        self.eps = eps
+
+        self.n_features = 3 * self.n_dims * self.codebook_size
+
+    def __call__(self, x):
+        x_gray = self.prepare_input(x)
+        ftrs = self.extract_features(x_gray)
+        ftrs = np.array(ftrs)
+
+        return ftrs
 
     def generate_codebook(self, dset):
         """In HOSA, we need to generate the K-word codebook (K clusters)
@@ -536,12 +620,13 @@ class HOSA:
             dset = split_dataset(dset, test_size)
 
         # We first create the codebook
-        if not self.codebook or not self.codebook_stats:
+        if (self.codebook is None) or (self.codebook_stats is None):
             print("Generating the visual codebook with the training set")
             train_dset = dset.loc[dset["is_test"] == 0, :].copy()
             self.generate_codebook(train_dset)
 
         # Then, we compute the main features (m, v, s) for every image
+        # TODO: Use np.memmap to handle large dataset?
         feature_db = []
         for i, row in enumerate(dset.to_dict("records")):
             im_name = row["image_name"]
@@ -561,198 +646,11 @@ class HOSA:
 
         return feature_db
 
-    def fit(self, feature_db, n_jobs=4):
-        """
-        Fit an SVR model to a given dset of ftrs
-        :param feature_db: dataframe with the columns:
-                    - image name
-                    - feature i ... feature N
-                    - MOS
-                    - test split indicator
-        :param n_jobs: number of threads for GridSearchCV
-        """
-
-        # Making the splits
-        train_mask = feature_db["is_test"] == 0
-        test_mask = feature_db["is_test"] == 1
-        feature_cols = feature_db.columns[1:-3]
-
-        X_train = feature_db.loc[train_mask, feature_cols].values
-        y_train = feature_db.loc[train_mask, "MOS"].values
-
-        X_test = feature_db.loc[test_mask, feature_cols].values
-        y_test = feature_db.loc[test_mask, "MOS"].values
-
-        # X_train = np.float16(X_train)
-        # X_test = np.float16(X_test)
-
-        params = {
-            "svr__C": np.arange(5, 10, 0.5),
-            "svr__epsilon": np.arange(0.25, 2.0, 0.25),
-        }
-
-        cv = GroupKFold(n_splits=5)
-        image_sets = feature_db.loc[train_mask, "image_set"].tolist()
-
-        search = GridSearchCV(
-            estimator=make_pipeline(StandardScaler(), SVR()),
-            param_grid=params,
-            cv=cv.split(X_train, y_train, groups=image_sets),
-            n_jobs=n_jobs,
-            verbose=1,
-            scoring={"LCC": make_scorer(lcc), "SROCC": make_scorer(srocc)},
-            error_score=0,
-            refit="SROCC",
-        )
-
-        search.fit(X_train, y_train)
-        self.svr_regressor = search.best_estimator_
-        print(self.svr_regressor[1].C, self.svr_regressor[1].epsilon)
-
-        # Test metrics
-        y_pred = self.svr_regressor.predict(X_test)
-        test_results = {
-            "LCC": lcc(y_test, y_pred),
-            "SROCC": srocc(y_test, y_pred),
-        }
-
-        return search.cv_results_, test_results
-
-    def predict_score(self, f):
-        """Predicts the score from a set of ftrs"""
-        score = self.svr_regressor.predict(f)
-        return score
-
     def export(self, path_save):
         # Export the codebook and the codebook stats
         print("Exporting the HOSA data to: ", path_save)
         np.savetxt(path_save / "hosa_codebook.csv", self.codebook, delimiter=",")
         np.savetxt(path_save / "codebook_stats.csv", self.codebook_stats, delimiter=",")
-
-        # Exporting the model
-        path_pkl = path_save / "feature_extractor.pkl"
-        print("Saving feature extractor to ", str(path_pkl))
-        with open(path_pkl, "wb") as f:
-            pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)
-
-
-class LFA(HOSA):
-    """Before HOSA, the authors developed LFA
-    "Local feature aggregation for blind image quality assessment"
-    https://ieeexplore.ieee.org/abstract/document/7457832"""
-
-    def __init__(
-        self,
-        patch_size=7,
-        codebook_size=100,
-        use_minibatch=True,
-        local_ftrs_frac=0.50,
-        r=5,
-        alpha=0.2,
-        beta=0.05,
-        img_size=512,
-        eps=10,
-        svr_regressor=None,
-    ):
-        self.img_size = img_size
-        self.patch_size = patch_size
-        self.unfold = nn.Unfold(kernel_size=self.patch_size, stride=self.patch_size)
-
-        # Parameters related to the K nearest codewords
-        self.codebook = None
-        self.codebook_size = codebook_size
-        self.use_minibatch = use_minibatch
-        self.local_ftrs_frac = local_ftrs_frac
-        self.r = r
-        self.alpha = alpha
-        self.beta = beta
-        self.n_dims = self.patch_size**2
-
-        # For normalization
-        self.eps = eps
-
-        self.n_features = self.n_dims * self.codebook_size
-        self.svr_regressor = svr_regressor
-
-    def generate_codebook(self, dset):
-        """In HOSA, we need to generate the K-word codebook (K clusters)
-        and the corresponding features of each cluster.
-
-        The HOSA paper did not provide a definition of coskewness,
-        so I had to look it up everywhere else. I found one here:
-        'Coskewness and the short-term predictability for Bitcoin return'
-        (Chen et al.)"""
-
-        all_ftrs = []
-        paths = dset["image_path"].values
-        for i, im_path in enumerate(paths):
-            im_name = Path(im_path).name
-            print(f"[Codebook][{i+1}/{len(dset)}]: Processing {im_name}")
-            img = cv2.imread(im_path)
-            img_gray = self.prepare_input(img)
-            local_ftrs = self.extract_local_features(img_gray)
-            all_ftrs.append(local_ftrs)
-        all_ftrs = np.concatenate(all_ftrs, axis=0)
-
-        # Clustering
-        print(
-            f"Generating {self.codebook_size}-word codebook"
-            f"(from {len(all_ftrs)} samples)"
-        )
-        if self.use_minibatch:
-            kmeans = MiniBatchKMeans(
-                n_clusters=self.codebook_size,
-                random_state=420,
-                batch_size=1024 * os.cpu_count(),
-            )
-        else:
-            kmeans = KMeans(n_clusters=self.codebook_size, random_state=420)
-        kmeans.fit(all_ftrs)
-        self.codebook = np.float16(kmeans.cluster_centers_)  # [100 x D]
-
-    def extract_features(self, x_gray):
-        """Extracts the local features of an image, for which
-        the r-nearest words from the main visual codebook are found.
-        Once the nearest clusters are found, we compute the features"""
-
-        local_ftrs = self.extract_local_features(x_gray)  # [M x D]
-
-        # Computing the distance to the 100-word codebook
-        # (codebook is [100 x D])
-        norms = cdist(local_ftrs, self.codebook, "euclidean")  # [M x 100]
-        rnn_idx = np.argsort(norms, axis=-1)[:, : self.r]  # [M x r]
-
-        # Computing the weights
-        norms_sq = norms**2
-        weights = np.exp(-self.beta * norms_sq)  # [M x 100]
-
-        # The statistics of all cluster assigments
-        v = np.zeros_like(self.codebook)  # [100 x D]
-
-        for i in range(self.codebook_size):
-            # Say we have N features assigned to cluster i
-            i_mask = (rnn_idx == i).sum(axis=1) > 0  # [M x 1]
-            if sum(i_mask) > 0:
-                cls_i_ftrs = local_ftrs[i_mask, :]  # [N x D]
-                cls_i_mean = self.codebook[i, :]  # [1 x D]
-                cls_i_weights = weights[i_mask, i]  # [N x 1]
-                cls_i_diff = cls_i_ftrs - cls_i_mean  # [N x D]
-                cls_i_v = np.dot(cls_i_weights.T, cls_i_diff)  # [1 x D]
-                v[i] = cls_i_v
-
-        # Convert to a single vector
-        out = np.reshape(v, (1, -1))
-
-        # Element-wise signed power normalization + L2 normalization
-        out = np.sign(out) * np.abs(out) ** self.alpha
-        out = out / np.linalg.norm(out)
-
-        return np.float16(np.squeeze(out))
-
-    def export(self, path_save):
-        # Export the codebook
-        print("Exporting the LFA data to: ", path_save)
-        np.savetxt(path_save / "lfa_codebook.csv", self.codebook, delimiter=",")
 
         # Exporting the model
         path_pkl = path_save / "feature_extractor.pkl"
@@ -778,7 +676,6 @@ class SOM:
         codebook_size=10000,
         use_minibatch=True,
         codebook=None,
-        svr_regressor=None,
         eps=1e-6,  # to prevent NaNs
     ):
         # SOM hyperparameters (suggested by the authors)
@@ -792,7 +689,6 @@ class SOM:
 
         # Some new parameters for my implementation
         self.regions_per_patch = regions_per_patch
-        self.svr_regressor = svr_regressor
         self.codebook = codebook
         self.use_minibatch = use_minibatch
         self.eps = eps
@@ -949,6 +845,7 @@ class SOM:
             self.generate_codebook(train_dset)
 
         # Then, we compute the main features for every image
+        # TODO: Use np.memmap to handle large dataset?
         feature_db = []
         for i, row in enumerate(dset.to_dict("records")):
             im_name = row["image_name"]
@@ -967,11 +864,6 @@ class SOM:
 
         return feature_db
 
-    def predict_score(self, f):
-        """Predicts the score from a set of ftrs"""
-        score = self.svr_regressor.predict(f)
-        return score
-
     def export(self, path_save):
         # Exporting the model
         path_pkl = path_save / "feature_extractor.pkl"
@@ -983,9 +875,4 @@ class SOM:
         ftrs = self.extract_features(x)
         ftrs = np.array(ftrs)
 
-        # If we have loaded a SVR model, we predict the IQA score
-        # The features are returned otherwise
-        if self.svr_regressor is not None:
-            return self.predict_score(ftrs.reshape(1, -1))
-        else:
-            return ftrs
+        return ftrs
