@@ -26,11 +26,11 @@ This measure was proposed in [Blind Image Quality Assessment Using Joint Statist
 This measure was proposed in [Local Feature Aggregation for Blind Image Quality Assessment (Xu et al. 2015)](https://ieeexplore.ieee.org/abstract/document/7457832), and it was the precursor of other measures (like HOSA). There are some things to consider:
 
 - Using **16-bit precision** whenever possibe: The construction of the visual codebook is memory-hungry, and probably not intended to be done with a laptop. Each local feature corresponds to a BxB patch, which results in (HxW)/(BxB) patches, and that can take a lot of RAM if you are using a large image dataset. For example, if we resized the images from KonIQ-10k to make them 512x382 and used 7x7 patches, each image would produce 3992 local features, which would result in more than 39M features for the whole dataset! Just imagine if we used the original image size...
-- **Image resizing**: Related to my first point, it's not clear whether the images undergo any resizing or if HOSA was designed to work for all image sizes. To make it comparable to other IQA measures in this repository, I'm resizing the images to 512px prior to feature extraction.
+- **Image resizing**: Related to my first point, it's not clear whether the images undergo any resizing or if LFA was designed to work for all image sizes. To make it comparable to other IQA measures in this repository, I'm resizing the images to 512px prior to feature extraction.
 - **Mini-batch K-means**: If we use larger IQA datasets, K-means will be very slow, so I decided to try this variation ([available in scikit-learn](https://scikit-learn.org/stable/modules/generated/sklearn.cluster.MiniBatchKMeans.html)) to see if it can speed up the learning phase.
 
 
-### High Orderd Statistics Aggregation (HOSA)
+### High Order Statistics Aggregation (HOSA)
 
 I implemented HOSA according to [Blind Image Quality Assessment Based on High
 Order Statistics Aggregation (Xu et al.)](https://ieeexplore.ieee.org/document/7501619). 
