@@ -3,3 +3,4 @@ __pycache__
 /.idea/
 /classiqa/models/
 /papers/
+iqa_datasets

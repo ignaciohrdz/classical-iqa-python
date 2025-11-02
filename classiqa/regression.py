@@ -103,8 +103,8 @@ class SimpleSVR:
         # Test metrics
         y_pred = self.svr_regressor.predict(X_test)
         test_results = {
-            "LCC": lcc(y_test, y_pred),
-            "SROCC": srocc(y_test, y_pred),
+            "LCC": round(lcc(y_test, y_pred), 4),
+            "SROCC": round(srocc(y_test, y_pred), 4),
         }
 
         return search.cv_results_, test_results
@@ -139,7 +139,7 @@ class SimpleMLP:
         self.pca_components = pca_components
         self.pca = None
 
-    def fit(self, feature_db, n_jobs=4):
+    def fit(self, feature_db, n_jobs=4, max_iter=2500):
         """
         Fit an SVR model to a given dset of features
         :param feature_db: dataframe with 15 columns:
@@ -195,7 +195,10 @@ class SimpleMLP:
         y_test = self.output_scaler.transform(y_test.reshape(-1, 1)).ravel()
 
         estimator = Pipeline(
-            steps=[("scaler", StandardScaler()), ("model", MLPRegressor(max_iter=1000))]
+            steps=[
+                ("scaler", StandardScaler()),
+                ("model", MLPRegressor(max_iter=max_iter)),
+            ]
         )
         search = GridSearchCV(
             estimator=estimator,
@@ -216,8 +219,8 @@ class SimpleMLP:
         # Test metrics
         y_pred = self.mlp_regressor.predict(X_test)
         test_results = {
-            "LCC": lcc(y_test, y_pred),
-            "SROCC": srocc(y_test, y_pred),
+            "LCC": round(lcc(y_test, y_pred), 4),
+            "SROCC": round(srocc(y_test, y_pred), 4),
         }
 
         return search.cv_results_, test_results

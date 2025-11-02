@@ -1,6 +1,6 @@
 import argparse
 from classiqa.data import dataset_names
-from classiqa.sseq import SSEQ
+from classiqa.entropy import SSEQ, ENIQA
 from classiqa.gmlog import GMLOG
 from classiqa.codebook import CORNIA, HOSA, LFA, SOM
 import json
@@ -12,6 +12,7 @@ MODEL_DICT = {
     "gmlog": GMLOG,
     "cornia": CORNIA,
     "som": SOM,
+    "eniqa": ENIQA,
 }
 
 
@@ -103,11 +104,10 @@ def export_results(path_json, dataset, model, regressor, metrics):
         with open(path_json, "r") as f:
             all_results = json.load(f)
         if dataset not in all_results.keys():
-            all_results[dataset] = {model: {regressor: metrics}}
+            all_results[dataset] = {}
         elif model not in all_results[dataset].keys():
-            all_results[dataset][model] = {regressor: metrics}
-        elif regressor not in all_results[dataset][model].keys():
-            all_results[dataset][model][regressor] = metrics
+            all_results[dataset][model] = {}
+        all_results[dataset][model][regressor] = metrics
     else:
         all_results = {dataset: {model: {regressor: metrics}}}
 

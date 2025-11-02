@@ -60,6 +60,7 @@ class GMLOG:
         """Computes the GM LOG features"""
 
         # Computation of Gradient Magnitude and Laplacian of Gaussian channels
+        # (the Sobel Operator is an approximation of Gaussian smoothing + differentiation)
         grad_x = cv2.Sobel(x_gray, cv2.CV_64F, 1, 0, self.kernel_size)
         grad_y = cv2.Sobel(x_gray, cv2.CV_64F, 0, 1, self.kernel_size)
         gm_i = cv2.magnitude(grad_x, grad_y)

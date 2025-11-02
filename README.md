@@ -6,6 +6,7 @@ This repository is a collection of classical IQA methods, long forgotten in favo
 
 - [SSEQ](#spatial-spectral-entropy-based-quality-sseq-index)
 - [GM-LOG](#gradient-magnitude-and-laplacian-features-gm-log)
+- [ENIQA](#entropy-based-no-reference-iqa-eniqa)
 - [LFA](#local-feature-aggregation-lfa)
 - [HOSA](#high-orderd-statistics-aggregation-hosa)
 - [CORNIA](#codebook-representation-for-no-reference-image-assessment-cornia)
@@ -20,6 +21,12 @@ I wasn't able to find a fully implemented Python version of this index, so I dec
 ### Gradient Magnitude and Laplacian features (GM-LOG)
 
 This measure was proposed in [Blind Image Quality Assessment Using Joint Statistics of Gradient Magnitude and Laplacian Features (Xue et al., 2014)](https://ieeexplore.ieee.org/abstract/document/6894197). The authors shared a [MATLAB implementation](http://www4.comp.polyu.edu.hk/~cslzhang/code/GM-LOG-BIQA.zip) that I used as a starting point.
+
+### Entropy-based No-reference IQA (ENIQA)
+
+This one was tougher to implement. The authors shared [their MATLAB implementation](https://github.com/jacob6/ENIQA), but the code was not very well documented and the paper doesn't help either (the explanation of the key fatures doesn't go too deep, and the features are computed in different order than in their MATLAB code!).
+
+In fact, I think their work is flawed because they trained their models on LIVEIQA and tested them on TID2013... And both datasets have some images that are identical. But that's another story and clearly out of the scope of this repository.
 
 ### Local Feature Aggregation (LFA)
 

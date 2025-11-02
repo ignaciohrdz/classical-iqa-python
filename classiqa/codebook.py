@@ -16,10 +16,36 @@ import matplotlib.pyplot as plt
 random.seed(420)
 
 
-# TODO: Complete this
 def plot_codebook(codebook, path_save):
-    for word in codebook:
-        word = word.reshape(7, 7).astype(np.float32)
+    """Creates a mosaic of all the learned codewords. This may be useful to
+    see whether the visual codewords make any sense"""
+    n_words = codebook.shape[0]
+    n_rows = int(np.sqrt(n_words))
+    n_cols = int(np.ceil(n_words / n_rows))
+    mosaic = []
+    row_image = []
+    for i in n_rows * n_cols:
+        if i <= n_words:
+            word = codebook[i]
+            word = word.reshape(7, 7).astype(np.float32)
+            word = (255 * word).astype(np.uint8)
+            word = cv2.copyMakeBorder(word, 3, 3, 3, 3, cv2.BORDER_CONSTANT, None, 255)
+        else:
+            # If the grid is larger than the actual codebook, we will leave the empty
+            # "cells" as white squares
+            word = np.ones(13, 13, dtype=np.uint8) * 255
+        row_idx = i // n_cols
+        col_idx = i % n_cols
+        if col_idx == 0 and row_idx == 0:
+            row_image = [word]
+        elif col_idx == 0 and row_idx > 0:
+            row_image = cv2.hconcat(row_image)
+            mosaic.append(row_image)
+            row_image = [word]
+        else:
+            row_image.append(word)
+    mosaic = cv2.vconcat(mosaic)
+    cv2.imwrite(str(path_save), mosaic)
 
 
 class CORNIA:
@@ -440,7 +466,7 @@ class LFA:
         path_codebook = path_save / f"{self.__class__.__name__}_codebook"
         np.savetxt(str(path_codebook) + ".csv", self.codebook, delimiter=",")
 
-        # TODO: Export a figure with the centroids
+        # Export a figure with the centroids
         plot_codebook(self.codebook, str(path_codebook) + ".png")
 
         # Exporting the model
@@ -648,9 +674,12 @@ class HOSA(LFA):
 
     def export(self, path_save):
         # Export the codebook and the codebook stats
-        print("Exporting the HOSA data to: ", path_save)
-        np.savetxt(path_save / "hosa_codebook.csv", self.codebook, delimiter=",")
+        path_codebook = path_save / f"{self.__class__.__name__}_codebook"
+        np.savetxt(str(path_codebook) + ".csv", self.codebook, delimiter=",")
         np.savetxt(path_save / "codebook_stats.csv", self.codebook_stats, delimiter=",")
+
+        # Export a figure with the centroids
+        plot_codebook(self.codebook, str(path_codebook) + ".png")
 
         # Exporting the model
         path_pkl = path_save / "feature_extractor.pkl"

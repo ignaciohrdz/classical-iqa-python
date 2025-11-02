@@ -242,8 +242,13 @@ def prepare_nitsiqa(path_nitsiqa):
         "Original Image Name": "image_set",
     }
     path_dataset = path_nitsiqa / "Database"
-    path_scores = path_dataset / "Score.xlsx"
-    dataset = pd.read_excel(path_scores, sheet_name="Sheet1")
+
+    # I had to convert the Excel file to CSV because lxml was giving
+    # troubles on my old laptop
+    # path_scores = path_dataset / "Score.xlsx"
+    # dataset = pd.read_excel(path_scores, sheet_name="Sheet1")
+    path_scores = path_dataset / "Score.csv"
+    dataset = pd.read_csv(path_scores)
     dataset.rename(columns=col_changes, inplace=True)
     dataset["image_path"] = dataset["image_name"].apply(lambda x: str(path_dataset / x))
     nitsiqa_data = dataset.loc[:, ["image_path", "image_name", "score", "image_set"]]
@@ -279,6 +284,7 @@ def prepare_cidiq(path_cidiq):
 
 
 # TODO: Get the CID2013 dataset
+# TODO: Get the SPAQ dataset
 
 
 dataset_fn_dict = {
