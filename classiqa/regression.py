@@ -18,7 +18,6 @@ class SimpleSVR:
         self.n_folds = n_folds
         self.epsilon = epsilon
         self.pca_components = pca_components
-        self.pca = None
 
     def fit(self, feature_db, n_jobs=4):
         """
@@ -41,12 +40,6 @@ class SimpleSVR:
 
         X_test = feature_db.loc[test_mask, feature_cols].values
         y_test = feature_db.loc[test_mask, "MOS"].values
-
-        # Dimensionality reduction (for methods like LFA)
-        if self.pca_components > 0:
-            self.pca = PCA(n_components=self.pca_components)
-            X_train = self.pca.fit_transform(X_train)
-            X_test = self.pca.transform(X_test)
 
         # Using similar ranges to those used by the GM-LOG authors
         params = {
@@ -76,7 +69,13 @@ class SimpleSVR:
         y_train = self.output_scaler.fit_transform(y_train.reshape(-1, 1)).ravel()
         y_test = self.output_scaler.transform(y_test.reshape(-1, 1)).ravel()
 
-        estimator = Pipeline(steps=[("scaler", StandardScaler()), ("model", svr)])
+        # Defining the pipeline (PCA is optional)
+        pipeline_steps = [("scaler", StandardScaler())]
+        if self.pca_components > 0:
+            pipeline_steps.append(("pca", PCA(n_components=self.pca_components)))
+        pipeline_steps.append(("model", svr))
+
+        estimator = Pipeline(steps=pipeline_steps)
         search = GridSearchCV(
             estimator=estimator,
             param_grid=params,
@@ -93,11 +92,11 @@ class SimpleSVR:
         # on the entire training set (because we used the 'refit' argument)
         self.svr_regressor = search.best_estimator_
         best_params = {
-            "C": self.svr_regressor[1].C,
-            "epsilon": self.svr_regressor[1].epsilon,
+            "C": self.svr_regressor[-1].C,
+            "epsilon": self.svr_regressor[-1].epsilon,
         }
         if not is_linear:
-            best_params["gamma"] = self.svr_regressor[1].gamma
+            best_params["gamma"] = self.svr_regressor[-1].gamma
         print("Best params: ", best_params)
 
         # Test metrics
@@ -117,8 +116,6 @@ class SimpleSVR:
 
     def predict_score(self, f):
         """Predicts the score from a set of features (f)"""
-        if self.pca_components > 0:
-            f = self.pca.transform(f)
         score = self.svr_regressor.predict(f)
         score = self.output_scaler.inverse_transform(score.reshape(-1, 1)).ravel()
         return score
@@ -137,7 +134,6 @@ class SimpleMLP:
         self.mlp_regressor = None
         self.n_folds = n_folds
         self.pca_components = pca_components
-        self.pca = None
 
     def fit(self, feature_db, n_jobs=4, max_iter=2500):
         """
@@ -160,12 +156,6 @@ class SimpleMLP:
 
         X_test = feature_db.loc[test_mask, feature_cols].values
         y_test = feature_db.loc[test_mask, "MOS"].values
-
-        # Dimensionality reduction
-        if self.pca_components > 0:
-            self.pca = PCA(n_components=self.pca_components)
-            X_train = self.pca.fit_transform(X_train)
-            X_test = self.pca.transform(X_test)
 
         # Using similar ranges to those used by the GM-LOG authors
         params = {
@@ -194,12 +184,13 @@ class SimpleMLP:
         y_train = self.output_scaler.fit_transform(y_train.reshape(-1, 1)).ravel()
         y_test = self.output_scaler.transform(y_test.reshape(-1, 1)).ravel()
 
-        estimator = Pipeline(
-            steps=[
-                ("scaler", StandardScaler()),
-                ("model", MLPRegressor(max_iter=max_iter)),
-            ]
-        )
+        # Defining the pipeline (PCA is optional)
+        pipeline_steps = [("scaler", StandardScaler())]
+        if self.pca_components > 0:
+            pipeline_steps.append(("pca", PCA(n_components=self.pca_components)))
+        pipeline_steps.append(("model", MLPRegressor(max_iter=max_iter)))
+
+        estimator = Pipeline(steps=pipeline_steps)
         search = GridSearchCV(
             estimator=estimator,
             param_grid=params,
@@ -233,8 +224,6 @@ class SimpleMLP:
 
     def predict_score(self, f):
         """Predicts the score from a set of features (f)"""
-        if self.pca_components > 0:
-            f = self.pca.transform(f)
         score = self.mlp_regressor.predict(f)
         score = self.output_scaler.inverse_transform(score.reshape(-1, 1)).ravel()
         return score

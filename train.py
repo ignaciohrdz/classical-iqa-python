@@ -1,10 +1,6 @@
 """Train a SVR on IQA datasets"""
 
-from classiqa.utils import (
-    extract_train_args,
-    resolve_model,
-    export_results,
-)
+from classiqa.utils import extract_train_args, resolve_model, export_results, N_PCA_DIMS
 from classiqa.regression import regressor_dict
 from classiqa.data import dataset_fn_dict
 import pandas as pd
@@ -16,15 +12,16 @@ if __name__ == "__main__":
 
     args = extract_train_args()
     args.path_datasets = "/home/ignaciohmon/projects/datasets/iqa_datasets"
-    args.dataset = "liveiqa"
-    args.model = "eniqa"
+    args.dataset = "koniq10k"
+    args.model = "cbiq"
+    args.regressor = "svr"
     args.overwrite = True
 
     # Define the feature extractor and the regressor
     feature_extractor = resolve_model(args.model, args.img_size)
     n_features = feature_extractor.n_features
     # Regressor
-    n_dims = 200 if args.model == "lfa" else 0
+    n_dims = N_PCA_DIMS[args.model]
     regressor = regressor_dict[args.regressor](pca_components=n_dims)
 
     if args.dataset == "csiq" and args.model in ["cornia", "lfa", "hosa", "som"]:

@@ -12,6 +12,10 @@ from pathlib import Path
 import os
 import pickle
 import matplotlib.pyplot as plt
+from skimage.filters import gabor_kernel
+from torchvision.utils import make_grid
+
+from scipy import ndimage as ndi
 
 random.seed(420)
 
@@ -24,7 +28,7 @@ def plot_codebook(codebook, path_save):
     n_cols = int(np.ceil(n_words / n_rows))
     mosaic = []
     row_image = []
-    for i in n_rows * n_cols:
+    for i in range(n_rows * n_cols):
         if i <= n_words:
             word = codebook[i]
             word = word.reshape(7, 7).astype(np.float32)
@@ -48,6 +52,259 @@ def plot_codebook(codebook, path_save):
     cv2.imwrite(str(path_save), mosaic)
 
 
+class CBIQ:
+    """No-Reference Image Quality Assessment Using Visual Codebooks
+    by Ye and Doermann (https://ieeexplore.ieee.org/document/6165361)
+    """
+
+    def __init__(
+        self,
+        img_size=512,
+        patch_size=11,
+        num_patches=5000,
+        codebook_size=10000,
+        use_minibatch=True,
+        img_clusters=200,
+        n_freq=5,
+        n_orient=4,
+        eps=1e-6,
+        codebook=None,
+    ):
+        self.img_size = img_size
+        self.patch_size = patch_size
+        self.num_patches = num_patches
+        self.codebook = codebook
+        self.codebook_size = codebook_size
+        self.img_clusters = img_clusters
+        self.use_minibatch = use_minibatch
+        self.n_freq = n_freq
+        self.n_orient = n_orient
+        self.eps = eps
+
+        # self.n_features = 2 * n_freq * n_orient
+        self.n_features = codebook_size
+
+        # We set stride to half the patch size to allow some overlapping
+        self.patch_stride = self.patch_size // 2
+        self.unfold = nn.Unfold(
+            kernel_size=self.patch_size,
+            stride=self.patch_stride,
+        )
+
+        # Creating the Gabor filter bank
+        self.gabor_bank = []
+        for i in range(self.n_freq):
+            f = (1 / np.sqrt(2)) ** i
+            for j in range(self.n_orient):
+                theta = (np.pi / 4) * j  # multiple of 45 degrees
+                k = gabor_kernel(frequency=f, theta=theta)
+                self.gabor_bank.append(k)
+
+    def crop_input(self, x):
+        """We make sure the image is divisible into NxN tiles (N = patch_size)
+        If the image is not divisible, we crop it
+        starting from the top-left corner"""
+        h, w = x.shape
+        h_cropped = h - (h % self.patch_size)
+        w_cropped = w - (w % self.patch_size)
+        return x[:h_cropped, :w_cropped]
+
+    def prepare_input(self, x):
+        """Initial conversion to grayscale and resizing"""
+
+        x_gray = cv2.cvtColor(x, cv2.COLOR_BGR2GRAY)
+        x_gray = self.crop_input(x_gray)
+        if self.img_size > 0:
+            ratio = self.img_size / max(x_gray.shape)
+            x_gray = cv2.resize(
+                x_gray,
+                None,
+                fx=ratio,
+                fy=ratio,
+                interpolation=cv2.INTER_CUBIC,
+            )
+        return x_gray
+
+    def extract_local_features(self, x_gray):
+        """Extracts the local features of an image. The image is convolved with the
+        Gabor filters, and then many BxB patches are sampled. For each path, the mean and variance
+        of all Gabor responses are calculated and used as features
+        :param x_gray: grayscale image
+        :returns local_ftrs: the local features
+        """
+        x_gray = x_gray / 255  # convert to float
+
+        # Apply Gabor filters
+        # We will create a tensor image with multiple channels,
+        # where each Gabor response represents a "channel"
+        x_gabor = [
+            np.abs(ndi.convolve(x_gray, k, mode="reflect")) for k in self.gabor_bank
+        ]
+        # For debugging
+        # for x in x_gabor:
+        #     cv2.imshow("Response", x)
+        #     cv2.waitKey()
+        x_gabor = np.stack(x_gabor)
+
+        # Normalise for illumination invariance (as in the paper)
+        x_gabor = x_gabor / np.sqrt(np.sum(x_gabor**2, 0) + self.eps)
+
+        # Using Pytorch for extracting local image patches
+        t = torch.from_numpy(x_gabor).unsqueeze(1).float()
+        t = self.unfold(t).permute(2, 0, 1)
+
+        # Show some patches (for debugging)
+        # for _ in range(20):
+        #     example = (
+        #         t[random.randint(0, len(t))]
+        #         .unsqueeze(1)
+        #         .view(len(self.gabor_bank), 1, self.patch_size, self.patch_size)
+        #     )
+        #     example = make_grid(example, nrow=5)
+        #     cv2.imshow("Response patches", make_grid(example).permute(1, 2, 0).numpy())
+        #     cv2.waitKey()
+
+        # Sampling M patches
+        # Avoid the areas with very low variance
+        patch_var = t.var(-1).mean(-1).squeeze()
+        idx_non_constant = (patch_var > 1e-3).nonzero()
+        if len(idx_non_constant) < self.num_patches:
+            idxs = list(range(t.shape[0]))
+        else:
+            idxs = idx_non_constant
+        random.shuffle(idxs)
+        idxs = idxs[: self.num_patches]
+        t = t[idxs, :, :]
+
+        # Computing the patch level features (mean and variance)
+        local_ftrs = torch.stack((t.mean(dim=-1), t.var(dim=-1)), axis=1)
+        local_ftrs = local_ftrs.view(local_ftrs.shape[0], -1).numpy()
+
+        # Using float16 is more memory-efficient
+        local_ftrs = np.float16(local_ftrs)
+
+        return local_ftrs
+
+    def generate_codebook(self, dset):
+        """Generate the K-word codebook (K clusters) from the training set."""
+
+        all_ftrs = []
+        paths = dset["image_path"].values
+        for i, im_path in enumerate(paths):
+            im_name = Path(im_path).name
+            print(f"[Codebook][{i+1}/{len(dset)}]: Processing {im_name}")
+            img = cv2.imread(im_path)
+            img_gray = self.prepare_input(img)
+            local_ftrs = self.extract_local_features(img_gray)
+            if self.img_clusters > 0:  # to reduce memory usage
+                kmeans = KMeans(n_clusters=self.img_clusters, random_state=420)
+                kmeans.fit(local_ftrs)
+                local_ftrs = np.float16(kmeans.cluster_centers_)
+            all_ftrs.append(local_ftrs)
+        all_ftrs = np.concatenate(all_ftrs, axis=0)
+
+        # Clustering
+        print(
+            f"Generating {self.codebook_size}-word codebook"
+            f"(from {len(all_ftrs)} samples)"
+        )
+        if self.use_minibatch:
+            # For faster computations, scikit-learn suggests a batch_size
+            # greater than 256 * number of cores to enable parallelism on all cores.
+            # So I decided to use 1024 * num_cores, why not??
+            kmeans = MiniBatchKMeans(
+                n_clusters=self.codebook_size,
+                random_state=420,
+                batch_size=1024 * os.cpu_count(),
+            )
+        else:
+            kmeans = KMeans(n_clusters=self.codebook_size, random_state=420)
+        kmeans.fit(all_ftrs)
+
+        # The codebook is [D x (2·orients·freqs)]
+        self.codebook = np.float16(kmeans.cluster_centers_)
+
+    def extract_features(self, x_gray):
+        """Extracts the local features of an image, and compares them to each
+        cluster from the codebook"""
+
+        local_ftrs = self.extract_local_features(x_gray)
+
+        # Soft-assignment coding
+        # Using Pytorch makes this slightly faster than numpy
+        dot_similarity = torch.matmul(
+            torch.from_numpy(local_ftrs), torch.from_numpy(self.codebook.T)
+        ).numpy()
+
+        # dot_similarity = local_ftrs.dot(self.codebook.T)
+        encoding = np.zeros_like(dot_similarity)
+        encoding[:, dot_similarity.argmax(-1)] = 1
+
+        # Average pooling (codeword-wise)
+        coefs = np.mean(encoding, axis=0)
+        coefs = np.float16(coefs)
+
+        return coefs
+
+    def generate_feature_db(self, dset, test_size=0.2):
+        """Creates the feature database that will be used to fit the SVR
+        :param dset: a DataFrame with columns [image_name, image_path, score, [img_set]]
+                    (not all datasets have the img_set columns, only those that contain
+                      groups of distorted images created from the same pristine source)
+        :param test_size: percentage of images for the test set
+        """
+
+        # Creating the train/test splits
+        if "is_test" not in dset.columns:
+            dset = split_dataset(dset, test_size)
+
+        # We first create the codebook
+        if not self.codebook:
+            print("Generating the visual codebook with the training set")
+            train_dset = dset.loc[dset["is_test"] == 0, :].copy()
+            self.generate_codebook(train_dset)
+
+        # Then, we compute the features for every image
+        feature_db = []
+        for i, row in enumerate(dset.to_dict("records")):
+            im_name = row["image_name"]
+            im_path = row["image_path"]
+            im_set = row["image_set"]
+            im_score = row["score"]
+            im_split = row["is_test"]
+            print(f"[Features][{i+1}/{len(dset)}]: Processing {im_name}")
+            img = cv2.imread(im_path)
+            img_gray = self.prepare_input(img)
+            ftrs = list(self.extract_features(img_gray))
+            feature_db.append([im_name] + ftrs + [im_score, im_split, im_set])
+
+        feature_cols = list(range(1, self.n_features + 1))
+        db_cols = ["image_name"] + feature_cols + ["MOS", "is_test", "image_set"]
+        feature_db = pd.DataFrame(feature_db, columns=db_cols)
+
+        return feature_db
+
+    def export(self, path_save):
+        # Export the codebook and the codebook stats
+        path_codebook = path_save / f"{self.__class__.__name__}_codebook"
+        np.savetxt(str(path_codebook) + ".csv", self.codebook, delimiter=",")
+
+        # Export a figure with the centroids
+        plot_codebook(self.codebook, str(path_codebook) + ".png")
+
+        path_pkl = path_save / "feature_extractor.pkl"
+        print("Saving feature extractor to ", str(path_pkl))
+        with open(path_pkl, "wb") as f:
+            pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    def __call__(self, x):
+        x_gray = self.prepare_input(x)
+        ftrs = self.extract_features(x_gray)
+        ftrs = np.array(ftrs)
+
+        return ftrs
+
+
 class CORNIA:
     """Unsupervised Feature Learning Framework for No-reference
     Image Quality Assessment by Ye et al. (https://ieeexplore.ieee.org/document/6247789)
@@ -59,6 +316,7 @@ class CORNIA:
         patch_size=7,
         num_patches=10000,
         codebook_size=2500,
+        img_clusters=200,
         use_minibatch=True,
         eps=1e-6,
         codebook=None,
@@ -66,6 +324,7 @@ class CORNIA:
         self.img_size = img_size
         self.patch_size = patch_size
         self.num_patches = num_patches
+        self.img_clusters = img_clusters
         self.codebook = codebook
         self.codebook_size = codebook_size
         self.use_minibatch = use_minibatch
@@ -152,6 +411,13 @@ class CORNIA:
             img = cv2.imread(im_path)
             img_gray = self.prepare_input(img)
             local_ftrs = self.extract_local_features(img_gray)
+            if self.img_clusters > 0:
+                # In CBIQ, the same authors used this solution
+                # to reduce memory usage: cluster the local features
+                # instead of using all of them, so I'm using it here too
+                kmeans = KMeans(n_clusters=self.img_clusters, random_state=420)
+                kmeans.fit(local_ftrs)
+                local_ftrs = np.float16(kmeans.cluster_centers_)
             all_ftrs.append(local_ftrs)
         all_ftrs = np.concatenate(all_ftrs, axis=0)
 

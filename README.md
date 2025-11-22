@@ -10,6 +10,7 @@ This repository is a collection of classical IQA methods, long forgotten in favo
 - [LFA](#local-feature-aggregation-lfa)
 - [HOSA](#high-orderd-statistics-aggregation-hosa)
 - [CORNIA](#codebook-representation-for-no-reference-image-assessment-cornia)
+- [CBIQ](#codebook-based-image-quality-assessment-cbiq)
 - [SOM](#semantic-obviousness-metric-som)
 
 ### Spatial-Spectral Entropy-based Quality (SSEQ) index
@@ -36,7 +37,6 @@ This measure was proposed in [Local Feature Aggregation for Blind Image Quality 
 - **Image resizing**: Related to my first point, it's not clear whether the images undergo any resizing or if LFA was designed to work for all image sizes. To make it comparable to other IQA measures in this repository, I'm resizing the images to 512px prior to feature extraction.
 - **Mini-batch K-means**: If we use larger IQA datasets, K-means will be very slow, so I decided to try this variation ([available in scikit-learn](https://scikit-learn.org/stable/modules/generated/sklearn.cluster.MiniBatchKMeans.html)) to see if it can speed up the learning phase.
 
-
 ### High Order Statistics Aggregation (HOSA)
 
 I implemented HOSA according to [Blind Image Quality Assessment Based on High
@@ -46,6 +46,10 @@ As it follows a similar approach (generating a codebook and computing some metri
 ### Codebook Representation for No-Reference Image Assessment (CORNIA)
 
 CORNIA is a very famous no-reference IQA measure that also makes use of visual codebooks. It was presented in [Unsupervised Feature Learning Framework for No-reference Image Quality Assessment (Ye et al., 2012)](https://ieeexplore.ieee.org/document/6247789) and, after reading the other papers more carefully, I discovered that CORNIA was the starting point for many codebook-based methods (SOM, LFA, HOSA...).
+
+### Codebook-based Image Quality Assessment (CBIQ)
+
+[Ye and Doermann (2011)](https://ieeexplore.ieee.org/document/6165361), the same authors of CORNIA, were the first ones to propose the use of visual codebooks for image quality assessment. Their first approach, before CORNIA, consisted of using Gabor-ﬁlter based features to generate visual codewords, which I've reproduced thanks to Scikit-image's Gabor filters. The reason why I don't use OpenCV's Gabor filter is because it requires specifying the kernel size, and the authors never specified that parameter. After some search, it looks like in MATLAB's implementation of Gabor filters [the kernel size is determined automatically](https://www.mathworks.com/matlabcentral/answers/456411-what-is-the-filter-size-of-imgaborfilt#answer_1536630), which makes it very similar to [Scikit-image's implementation](https://scikit-image.org/docs/stable/api/skimage.filters.html#skimage.filters.gabor_kernel).
 
 ### Semantic Obviousness Metric (SOM)
 

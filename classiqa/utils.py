@@ -2,7 +2,7 @@ import argparse
 from classiqa.data import dataset_names
 from classiqa.entropy import SSEQ, ENIQA
 from classiqa.gmlog import GMLOG
-from classiqa.codebook import CORNIA, HOSA, LFA, SOM
+from classiqa.codebook import CBIQ, CORNIA, HOSA, LFA, SOM
 import json
 
 MODEL_DICT = {
@@ -10,9 +10,22 @@ MODEL_DICT = {
     "lfa": LFA,
     "hosa": HOSA,
     "gmlog": GMLOG,
+    "cbiq": CBIQ,
     "cornia": CORNIA,
     "som": SOM,
     "eniqa": ENIQA,
+}
+
+# TODO: Some measures did not use PCA originally, and maybe they should
+N_PCA_DIMS = {
+    "sseq": 0,
+    "lfa": 200,
+    "hosa": 0,
+    "gmlog": 0,
+    "cbiq": 0.95,
+    "cornia": 0,
+    "som": 0,
+    "eniqa": 0,
 }
 
 

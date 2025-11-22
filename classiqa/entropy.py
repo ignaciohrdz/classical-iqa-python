@@ -252,7 +252,9 @@ class ENIQA:
                 # They used nearest-neighbour in the paper
                 interpolation=cv2.INTER_NEAREST,
             )
+
         x_gray = cv2.cvtColor(x_color, cv2.COLOR_BGR2GRAY)
+
         return x_color, x_gray
 
     def compute_saliency(self, x_gray):
@@ -330,9 +332,9 @@ class ENIQA:
         for s in range(self.lgf_n_scale):
             wavelength = self.lgf_min_wavelenght * (self.lgf_scale_factor**s)
             fo = 1.0 / wavelength
-            comp = np.exp(
-                -(np.log(radius / fo) ** 2) / (2 * np.log(self.lgf_sigmaonf) ** 2)
-            )
+            a = np.log(radius / fo) ** 2
+            b = 2 * np.log(self.lgf_sigmaonf) ** 2
+            comp = np.exp(-a / b)
             comp[0, 0] = 0  # set the 0 frequency point back to zero.
             rad_comps.append(comp)
 
@@ -519,6 +521,9 @@ class ENIQA:
         # Creating the train/test splits
         if "is_test" not in dset.columns:
             dset = split_dataset(dset, test_size)
+
+        # TODO: Compare the features with the ones provided by the authors:
+        #   https://github.com/jacob6/ENIQA/tree/master/ENIQA_release/data
 
         feature_db = []
         for i, row in enumerate(dset.to_dict("records")):
