@@ -1,4 +1,5 @@
 import argparse
+from classiqa.blur import BlurEffect
 from classiqa.data import dataset_names
 from classiqa.entropy import SSEQ, ENIQA
 from classiqa.gradient import GMLOG
@@ -14,6 +15,7 @@ MODEL_DICT = {
     "cornia": CORNIA,
     "som": SOM,
     "eniqa": ENIQA,
+    "blur_effect": BlurEffect,
 }
 
 # TODO: Some measures did not use PCA originally, and maybe they should
@@ -26,6 +28,7 @@ N_PCA_DIMS = {
     "cornia": 0.95,
     "som": 0,
     "eniqa": 0,
+    "blur_effect": 0,
 }
 
 
@@ -118,7 +121,7 @@ def export_results(path_json, dataset, model, regressor, metrics):
             all_results = json.load(f)
         if dataset not in all_results.keys():
             all_results[dataset] = {}
-        elif model not in all_results[dataset].keys():
+        if model not in all_results[dataset].keys():
             all_results[dataset][model] = {}
         all_results[dataset][model][regressor] = metrics
     else:

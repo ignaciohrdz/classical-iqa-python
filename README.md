@@ -12,6 +12,7 @@ This repository is a collection of classical IQA methods, long forgotten in favo
 - [CORNIA](#codebook-representation-for-no-reference-image-assessment-cornia)
 - [CBIQ](#codebook-based-image-quality-assessment-cbiq)
 - [SOM](#semantic-obviousness-metric-som)
+- [Blur Effect](#blur-effect)
 
 ### Spatial-Spectral Entropy-based Quality (SSEQ) index
 
@@ -58,6 +59,10 @@ This one was presented in [SOM: Semantic Obviousness Metric for Image Quality As
 Unfortunately, the paper did not provide enough details for the implementation, such as the computing requirements or any link to their code. I had to make some assumptions and tweak some parameters to make it less memory-hungry, and also use 16-bit precision and mini-batch K-means.
 
 Moreover, the OpenCV implementation of the BING object-like detector doesn't seem to work as expected either, as it is much slower than [what the authors of BING reported (300fps)](https://mmcheng.net/mftp/Papers/ObjectnessBING.pdf). After a quick search, this appears to have happenned to other people in the past, and the OpenCV documentation for these saliency models is useless and almost non-existent. The objectness scores don't seem to work either, and [it has been reported to the opencv-contrib team](https://github.com/opencv/opencv_contrib/issues/404) for a long, long time.
+
+### Blur Effect
+
+This one was easy as I only had to create a wrapper for Scikit-learn's `measure.blur_effect`. I'm adding this one to the repo just to have more IQA methods available in a single place. It was proposed in [The blur effect: perception and estimation with a new no-reference perceptual blur metric (Crete et al., 2007)](https://hal.archives-ouvertes.fr/hal-00232709).
 
 ## How to train an IQA model
 
