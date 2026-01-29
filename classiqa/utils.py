@@ -1,7 +1,7 @@
 import argparse
 from classiqa.data import dataset_names
 from classiqa.entropy import SSEQ, ENIQA
-from classiqa.gmlog import GMLOG
+from classiqa.gradient import GMLOG
 from classiqa.codebook import CBIQ, CORNIA, HOSA, LFA, SOM
 import json
 
@@ -23,7 +23,7 @@ N_PCA_DIMS = {
     "hosa": 0,
     "gmlog": 0,
     "cbiq": 0.95,
-    "cornia": 0,
+    "cornia": 0.95,
     "som": 0,
     "eniqa": 0,
 }
