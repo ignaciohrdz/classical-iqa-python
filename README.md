@@ -13,6 +13,8 @@ This repository is a collection of classical IQA methods, long forgotten in favo
 - [CBIQ](#codebook-based-image-quality-assessment-cbiq)
 - [SOM](#semantic-obviousness-metric-som)
 - [Blur Effect](#blur-effect)
+- [Variance of Laplacian](#variance-of-laplacian)
+- [Image contrast for autofocus](#image-contrast-for-autofocus)
 
 ### Spatial-Spectral Entropy-based Quality (SSEQ) index
 
