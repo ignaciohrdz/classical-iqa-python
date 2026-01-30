@@ -1,5 +1,5 @@
 import argparse
-from classiqa.blur import BlurEffect
+from classiqa.focus import BlurEffect, VarianceOfLaplacian, NandaCutlerContrast
 from classiqa.data import dataset_names
 from classiqa.entropy import SSEQ, ENIQA
 from classiqa.gradient import GMLOG
@@ -8,27 +8,23 @@ import json
 
 MODEL_DICT = {
     "sseq": SSEQ,
+    "eniqa": ENIQA,
     "lfa": LFA,
-    "hosa": HOSA,
-    "gmlog": GMLOG,
     "cbiq": CBIQ,
     "cornia": CORNIA,
+    "hosa": HOSA,
     "som": SOM,
-    "eniqa": ENIQA,
+    "gmlog": GMLOG,
     "blur_effect": BlurEffect,
+    "var_lap": VarianceOfLaplacian,
+    "nanda_cutler": NandaCutlerContrast,
 }
 
 # TODO: Some measures did not use PCA originally, and maybe they should
 N_PCA_DIMS = {
-    "sseq": 0,
     "lfa": 200,
-    "hosa": 0,
-    "gmlog": 0,
     "cbiq": 0.95,
     "cornia": 0.95,
-    "som": 0,
-    "eniqa": 0,
-    "blur_effect": 0,
 }
 
 
