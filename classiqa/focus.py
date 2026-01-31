@@ -71,7 +71,7 @@ class NandaCutlerContrast(BaseModel):
                 self.kernels.append(k)
 
     def extract_features(self, x_gray):
-        """Computes the Blur Effect measure"""
+        """Computes the contrast measure"""
         diffs = np.stack([cv2.filter2D(x_gray, -1, k) for k in self.kernels])
         diffs = np.abs(diffs).sum(axis=0)
         features = [diffs.sum()]
