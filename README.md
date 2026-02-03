@@ -71,17 +71,14 @@ I have simply taken the [BRISQUE package by rehangua](https://github.com/rehangu
 
 This one was easy as I only had to create a wrapper for Scikit-learn's `measure.blur_effect`. I'm adding this one to the repo just to have more IQA methods available in a single place. It was proposed in [The blur effect: perception and estimation with a new no-reference perceptual blur metric (Crete et al., 2007)](https://hal.archives-ouvertes.fr/hal-00232709).
 
-#### Variance of Laplacian
-
-I used the same method as in this [Pyimagesearch post](https://pyimagesearch.com/2015/09/07/blur-detection-with-opencv/). The original measure was proposed in [Diatom autofocusing in brightfield microscopy: a comparative study (Pacheco et al., 2000)](https://ieeexplore.ieee.org/document/903548).
-
-#### Image contrast for autofocus
+#### Measures for autofocus
 
 In [Analysis of focus measure operators in shape-from-focus (Pertuz et al., 2012)](https://www.sciencedirect.com/science/article/abs/pii/S0031320312004736?via%3Dihub) there are a lot of focus measures that could be easy to implement. Despite they're probably not very good for IQA, at least they can be used to compute some interesting measures.
 
 - Brenner's focus measure (`MIS2`), proposed in [An automated microscope for cytologic research a preliminary evaluation (Brenner et al., 1976)](https://pubmed.ncbi.nlm.nih.gov/1254907/) 
 - Image contrast (`MIS3` in the paper), which was originally proposed in [Practical calibrations for a real-time digital omnidirectional camera (Nanda and Cutler, 2001)](https://www.researchgate.net/profile/Ross-Cutler/publication/228952354_Practical_calibrations_for_a_real-time_digital_omnidirectional_camera/links/09e4150bc3a55d3861000000/Practical-calibrations-for-a-real-time-digital-omnidirectional-camera.pdf). I've called it `NandaCutlerContrast`.
 - Helmli and Scherer's mean method for contrast (`MIS5`), proposed in [Adaptive shape from focus with an error estimation in light microscopy (Helmli and Scherer, 2001)](https://ieeexplore.ieee.org/document/938626). I've called it `MeanMethodFocus`.
+- Variance of Laplacian (`LAP4`). I used the same method as in this [Pyimagesearch post](https://pyimagesearch.com/2015/09/07/blur-detection-with-opencv/). The original measure was proposed in [Diatom autofocusing in brightfield microscopy: a comparative study (Pacheco et al., 2000)](https://ieeexplore.ieee.org/document/903548).
 
 #### Difference of differences
 
