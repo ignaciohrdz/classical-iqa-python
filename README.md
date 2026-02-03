@@ -12,9 +12,8 @@ This repository is a collection of classical IQA methods, long forgotten in favo
 - [CORNIA](#codebook-representation-for-no-reference-image-assessment-cornia)
 - [CBIQ](#codebook-based-image-quality-assessment-cbiq)
 - [SOM](#semantic-obviousness-metric-som)
-- [Blur Effect](#blur-effect)
-- [Variance of Laplacian](#variance-of-laplacian)
-- [Image contrast for autofocus](#image-contrast-for-autofocus)
+- [BRISQUE](#blindreferenceless-image-spatial-quality-evaluator-brisque)
+- [Focus measures](#focus-measures)
 
 ### Spatial-Spectral Entropy-based Quality (SSEQ) index
 
@@ -62,17 +61,27 @@ Unfortunately, the paper did not provide enough details for the implementation, 
 
 Moreover, the OpenCV implementation of the BING object-like detector doesn't seem to work as expected either, as it is much slower than [what the authors of BING reported (300fps)](https://mmcheng.net/mftp/Papers/ObjectnessBING.pdf). After a quick search, this appears to have happenned to other people in the past, and the OpenCV documentation for these saliency models is useless and almost non-existent. The objectness scores don't seem to work either, and [it has been reported to the opencv-contrib team](https://github.com/opencv/opencv_contrib/issues/404) for a long, long time.
 
-### Blur Effect
+### Blind/Referenceless Image Spatial Quality Evaluator (BRISQUE)
+
+I have simply taken the [BRISQUE package by rehangua](https://github.com/rehanguha/brisque) and wrapped it to make it work like all my other models. This makes it possible to generate BRISQUE features for new datasets and train custom regression models.
+
+### Focus measures
+
+#### Blur Effect
 
 This one was easy as I only had to create a wrapper for Scikit-learn's `measure.blur_effect`. I'm adding this one to the repo just to have more IQA methods available in a single place. It was proposed in [The blur effect: perception and estimation with a new no-reference perceptual blur metric (Crete et al., 2007)](https://hal.archives-ouvertes.fr/hal-00232709).
 
-### Variance of Laplacian
+#### Variance of Laplacian
 
 I used the same method as in this [Pyimagesearch post](https://pyimagesearch.com/2015/09/07/blur-detection-with-opencv/). The original measure was proposed in [Diatom autofocusing in brightfield microscopy: a comparative study (Pacheco et al., 2000)](https://ieeexplore.ieee.org/document/903548).
 
-### Image contrast for autofocus
+#### Image contrast for autofocus
 
-In [Analysis of focus measure operators in shape-from-focus (Pertuz et al., 2012)](https://www.sciencedirect.com/science/article/abs/pii/S0031320312004736?via%3Dihub) there are a lot of focus measures that could be easy to implement. I've started with image contrast (`MIS3` in the paper), which was originally proposed in [Practical calibrations for a real-time digital omnidirectional camera (Nanda and Cutler, 2001)](https://www.researchgate.net/profile/Ross-Cutler/publication/228952354_Practical_calibrations_for_a_real-time_digital_omnidirectional_camera/links/09e4150bc3a55d3861000000/Practical-calibrations-for-a-real-time-digital-omnidirectional-camera.pdf). I've called it `NandaCutlerContrast`.
+In [Analysis of focus measure operators in shape-from-focus (Pertuz et al., 2012)](https://www.sciencedirect.com/science/article/abs/pii/S0031320312004736?via%3Dihub) there are a lot of focus measures that could be easy to implement. Despite they're probably not very good for IQA, at least they can be used to compute some interesting measures.
+
+- Brenner's focus measure (`MIS2`), proposed in [An automated microscope for cytologic research a preliminary evaluation (Brenner et al., 1976)](https://pubmed.ncbi.nlm.nih.gov/1254907/) 
+- Image contrast (`MIS3` in the paper), which was originally proposed in [Practical calibrations for a real-time digital omnidirectional camera (Nanda and Cutler, 2001)](https://www.researchgate.net/profile/Ross-Cutler/publication/228952354_Practical_calibrations_for_a_real-time_digital_omnidirectional_camera/links/09e4150bc3a55d3861000000/Practical-calibrations-for-a-real-time-digital-omnidirectional-camera.pdf). I've called it `NandaCutlerContrast`.
+- Helmli and Scherer's mean method for contrast (`MIS5`), proposed in [Adaptive shape from focus with an error estimation in light microscopy (Helmli and Scherer, 2001)](https://ieeexplore.ieee.org/document/938626). I've called it `MeanMethodFocus`.
 
 ## How to train an IQA model
 
@@ -91,3 +100,7 @@ I'm using the following datasets:
 ## Results
 
 You can find some results [here](./results.json).
+
+## Other interesting links
+
+- [Image Quality Checker](https://github.com/semwaqas/image-quality-score)

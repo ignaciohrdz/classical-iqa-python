@@ -83,3 +83,37 @@ class BaseModel:
         print("Saving feature extractor to ", str(path_pkl))
         with open(path_pkl, "wb") as f:
             pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+class PatchModel(BaseModel):
+    """This model assumes the metric is computed in patches of patch_size x patch_size,
+    so it ensures that all inputs can be safely divided into patches of such size"""
+
+    def __init__(self, img_size, n_features, patch_size):
+        super().__init__(img_size, n_features)
+        self.patch_size = patch_size
+
+    def crop_input(self, x):
+        """We make sure the image is divisible into NxN tiles (N = patch_size)
+        If the image is not divisible, we crop it
+        starting from the top-left corner"""
+        h, w = x.shape
+        h_cropped = h - (h % self.patch_size)
+        w_cropped = w - (w % self.patch_size)
+        return x[:h_cropped, :w_cropped]
+
+    def prepare_input(self, x):
+        """Initial conversion to grayscale and resizing"""
+
+        x_gray = cv2.cvtColor(x, cv2.COLOR_BGR2GRAY)
+        x_gray = self.crop_input(x_gray)
+        if self.img_size > 0:
+            ratio = self.img_size / max(x_gray.shape)
+            x_gray = cv2.resize(
+                x_gray,
+                None,
+                fx=ratio,
+                fy=ratio,
+                interpolation=cv2.INTER_CUBIC,
+            )
+        return x_gray

@@ -1,26 +1,18 @@
 import argparse
-from classiqa.focus import BlurEffect, VarianceOfLaplacian, NandaCutlerContrast
 from classiqa.data import dataset_names
-from classiqa.entropy import SSEQ, ENIQA
-from classiqa.gradient import GMLOG
-from classiqa.codebook import CBIQ, CORNIA, HOSA, LFA, SOM
+from classiqa.entropy import entropy_models_dict
+from classiqa.codebook import codebook_models_dict
+from classiqa.focus import focus_models_dict
+from classiqa.nss import nss_model_dict
 import json
 
-MODEL_DICT = {
-    "sseq": SSEQ,
-    "eniqa": ENIQA,
-    "lfa": LFA,
-    "cbiq": CBIQ,
-    "cornia": CORNIA,
-    "hosa": HOSA,
-    "som": SOM,
-    "gmlog": GMLOG,
-    "blur_effect": BlurEffect,
-    "var_lap": VarianceOfLaplacian,
-    "nanda_cutler": NandaCutlerContrast,
-}
+MODEL_DICT = (
+    entropy_models_dict | codebook_models_dict | focus_models_dict | nss_model_dict
+)
+
 
 # TODO: Some measures did not use PCA originally, and maybe they should
+# We will add them here
 N_PCA_DIMS = {
     "lfa": 200,
     "cbiq": 0.95,
