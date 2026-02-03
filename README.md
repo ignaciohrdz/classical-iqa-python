@@ -63,7 +63,7 @@ Moreover, the OpenCV implementation of the BING object-like detector doesn't see
 
 ### Blind/Referenceless Image Spatial Quality Evaluator (BRISQUE)
 
-I have simply taken the [BRISQUE package by rehangua](https://github.com/rehanguha/brisque) and wrapped it to make it work like all my other models. This makes it possible to generate BRISQUE features for new datasets and train custom regression models.
+I have simply taken the [BRISQUE package by rehangua](https://github.com/rehanguha/brisque) and wrapped it to make it work like all my other models. This makes it possible to generate BRISQUE features for new datasets and train custom regression models. This measure was proposed in [No-Reference Image Quality Assessment in the Spatial Domain (Mittal et al., 2012)](https://live.ece.utexas.edu/research/quality/brisque_journal.pdf).
 
 ### Focus measures
 
