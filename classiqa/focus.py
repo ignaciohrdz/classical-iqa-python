@@ -128,6 +128,83 @@ class MeanMethodFocus(PatchModel):
         return features
 
 
+class DeltaDifferences(BaseModel):
+    """From 'Sharpness Estimation for Document and Scene Images' (Kumar et al., 2012)
+    See:
+        https://ieeexplore.ieee.org/document/6460868
+        https://github.com/umang-singhal/pydom
+    """
+
+    def __init__(
+        self,
+        img_size,
+        median_size=3,
+        window_size=5,
+        edge_thresh=1e-4,
+        sharp_thresh=2,
+        eps=1e-4,
+        maxdom=False,
+    ):
+        super().__init__(img_size, 1)
+        self.median_size = median_size
+        self.window_size = window_size
+        self.edge_thresh = edge_thresh
+        self.sharp_thresh = sharp_thresh
+        self.eps = eps
+        self.maxdom = maxdom
+
+        # DoM = [Im(i+2,j) - Im(i,j)] - [Im(i,j) - Im(i-2,j)]
+        #     = Im(i+2,j) - 2xIm(i,j) + Im(i-2, j)
+        self.dom_filter = np.array([[1, 0, -2, 0, 1]], dtype=float)
+        self.contrast_filter = np.array([[-1, 1, 0]])
+        self.window_sum_filter = np.ones((window_size, window_size), dtype=float)
+        self.smoothing_filter = np.array([[0.5, 0, -0.5]], dtype=float)
+
+    def extract_features(self, x_gray):
+
+        # Median filtering is used to reduce noise
+        x_median = cv2.medianBlur(x_gray, self.median_size) / 255.0
+
+        # Difference of differences
+        dom_x = np.abs(cv2.filter2D(x_median, -1, self.dom_filter))
+        dom_y = np.abs(cv2.filter2D(x_median, -1, self.dom_filter.T))
+
+        # Contrast (used for normalisation)
+        contrast = np.abs(cv2.filter2D(x_gray, -1, self.contrast_filter)) / 255.0
+        contrast_sum = cv2.filter2D(contrast, -1, self.window_sum_filter)
+        contrast_sum += 1 / 255  # to prevent NaNs
+
+        # Finding the edges
+        edges_x = cv2.filter2D(x_gray, -1, self.smoothing_filter)
+        edges_y = cv2.filter2D(x_gray, -1, self.smoothing_filter.T)
+        edges_x = edges_x / (edges_x.max() + self.eps)
+        edges_y = edges_y / (edges_y.max() + self.eps)
+
+        s = 0
+        for dom_i, edge_i in zip([dom_x, dom_y], [edges_x, edges_y]):
+            # Aggregate the DOM values
+            if self.maxdom:
+                dom_i_agg = cv2.dilate(dom_i, self.window_sum_filter)
+            else:
+                dom_i_agg = cv2.filter2D(dom_i, -1, self.window_sum_filter)
+
+            # Normalisation
+            sharpness_i = dom_i_agg / contrast_sum
+
+            # cv2.imshow("Sharpness", sharpness_i)
+            # cv2.imshow("Edge", edge_i)
+            # cv2.waitKey()
+
+            is_edge = (edge_i >= self.edge_thresh).astype(float)
+            is_sharp = (sharpness_i >= self.sharp_thresh).astype(float)
+            r_i = (is_sharp * is_edge).sum() / is_edge.sum()
+            s += r_i**2
+        s = np.sqrt(s)
+        features = [s / np.sqrt(2)]
+
+        return features
+
+
 # TODO: Implement the S3 measure:
 # Use this repo: https://github.com/Xiaoming-Zhao/s3_sharpness_measure
 
@@ -138,4 +215,5 @@ focus_models_dict = {
     "brenner": BrennerFocus,
     "nanda_cutler": NandaCutlerContrast,
     "mean_method": MeanMethodFocus,
+    "dom": DeltaDifferences,
 }

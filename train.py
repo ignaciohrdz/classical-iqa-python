@@ -6,7 +6,6 @@ from classiqa.data import dataset_fn_dict
 import pandas as pd
 from pathlib import Path
 
-import cv2
 
 if __name__ == "__main__":
 
@@ -21,7 +20,10 @@ if __name__ == "__main__":
     feature_extractor = resolve_model(args.model, args.img_size)
     n_features = feature_extractor.n_features
     # Regressor
-    n_dims = N_PCA_DIMS[args.model]
+    if args.model not in N_PCA_DIMS.keys():
+        n_dims = 0
+    else:
+        n_dims = N_PCA_DIMS[args.model]
     regressor = regressor_dict[args.regressor](pca_components=n_dims)
 
     if args.dataset == "csiq" and args.model in ["cornia", "lfa", "hosa", "som"]:

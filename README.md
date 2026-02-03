@@ -83,6 +83,15 @@ In [Analysis of focus measure operators in shape-from-focus (Pertuz et al., 2012
 - Image contrast (`MIS3` in the paper), which was originally proposed in [Practical calibrations for a real-time digital omnidirectional camera (Nanda and Cutler, 2001)](https://www.researchgate.net/profile/Ross-Cutler/publication/228952354_Practical_calibrations_for_a_real-time_digital_omnidirectional_camera/links/09e4150bc3a55d3861000000/Practical-calibrations-for-a-real-time-digital-omnidirectional-camera.pdf). I've called it `NandaCutlerContrast`.
 - Helmli and Scherer's mean method for contrast (`MIS5`), proposed in [Adaptive shape from focus with an error estimation in light microscopy (Helmli and Scherer, 2001)](https://ieeexplore.ieee.org/document/938626). I've called it `MeanMethodFocus`.
 
+#### Difference of differences
+
+This is the method proposed in [Sharpness Estimation for Document and Scene Images (Kumar et al., 2012)](https://ieeexplore.ieee.org/document/6460868). There is already a Python implementation of this metric ([here](https://github.com/umang-singhal/pydom)), but I preferred to reimplement it to match the style of my other models. I've called it `DeltaDifferences`. I've also decided to make some contributions:
+
+1. Normalise the score instead of working in the [0, $\sqrt{2}$] range. 
+2. Including the MaxDoM-based sharpness proposed by the authors in [their patent](https://patents.google.com/patent/US20130121610A1/en) (i.e. taking the max sharpness value at each window).
+
+I wasn't able to find an "official" sharpness threshold, so I've used the one used in [umang-singhal's repo](https://github.com/umang-singhal/pydom/blob/master/dom/dom.py#L240). But I can be easily changed by the user depending on the image to analyse.
+
 ## How to train an IQA model
 
 For all these models I'm following the same approach: splitting every dataset into a training and a test set. I use the training sets with K-fold cross-validation to get the best parameters for each regression model. As of today, it's possible to fit an SVR or an MLP.
@@ -104,3 +113,4 @@ You can find some results [here](./results.json).
 ## Other interesting links
 
 - [Image Quality Checker](https://github.com/semwaqas/image-quality-score)
+- [Image Quality](https://github.com/ocampor/image-quality)
