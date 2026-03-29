@@ -1,0 +1,17 @@
+name: classiqa
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12
+  - numpy
+  - pandas
+  - scikit-learn
+  - scipy
+  - opencv
+  - pillow
+  - pip
+  - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cpu  
+      - torch
+      - torchvision

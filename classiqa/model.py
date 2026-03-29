@@ -16,27 +16,30 @@ class BaseModel:
     See: https://scikit-image.org/docs/stable/auto_examples/filters/plot_blur_effect.html
     """
 
-    def __init__(self, img_size, n_features):
+    def __init__(self, img_size, n_features, bgr_input=False):
 
         self.img_size = img_size
         self.n_features = n_features
+        self.bgr_input = bgr_input
 
     def prepare_input(self, x):
         """Initial conversion to grayscale and resizing"""
 
-        x_gray = cv2.cvtColor(x, cv2.COLOR_BGR2GRAY)
+        if not self.bgr_input:
+            x = cv2.cvtColor(x, cv2.COLOR_BGR2GRAY)
+
         if self.img_size > 0:
-            ratio = self.img_size / max(x_gray.shape)
-            x_gray = cv2.resize(
-                x_gray,
+            ratio = self.img_size / max(x.shape[:2])
+            x = cv2.resize(
+                x,
                 None,
                 fx=ratio,
                 fy=ratio,
                 interpolation=cv2.INTER_CUBIC,
             )
-        return x_gray
+        return x
 
-    def extract_features(self, x_gray):
+    def extract_features(self, x):
         """This function should return the features"""
         features = [np.zeros(self.n_features)]
         return features

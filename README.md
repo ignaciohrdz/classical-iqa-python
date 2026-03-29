@@ -71,6 +71,15 @@ I have simply taken the [BRISQUE package by rehangua](https://github.com/rehangu
 
 This one was easy as I only had to create a wrapper for Scikit-learn's `measure.blur_effect`. I'm adding this one to the repo just to have more IQA methods available in a single place. It was proposed in [The blur effect: perception and estimation with a new no-reference perceptual blur metric (Crete et al., 2007)](https://hal.archives-ouvertes.fr/hal-00232709).
 
+#### Gradient magnitude and Phase congruency-based and Saliency-guided Quality model (GPSQ)
+
+This measure was presented in [Quality assessment for real out-of-focus blurred images (Liu et al., 2017)](https://www.sciencedirect.com/science/article/abs/pii/S1047320317300676). Unfortunately, GPSQ has several bottlenecks:
+
+- Phase congruency (PC): there isn't any Python package for this. Fortunately, the author who proposed Image Phase Congruency shared a [Julia implementation](https://github.com/peterkovesi/ImagePhaseCongruency.jl), and I could use it thanks to the `juliacall` package.
+- Saliency: the authors of GPSQ used [CovSal (Erdem and Erdem, 2013)](https://web.cs.hacettepe.edu.tr/~erkut/projects/CovSal/), so I had to implement it myself. Similarly to what the authors reported, CovSal takes "a few seconds".
+
+In summary, GPSQ is so slow that I would not recommend you to use it.
+
 #### Measures for autofocus
 
 In [Analysis of focus measure operators in shape-from-focus (Pertuz et al., 2012)](https://www.sciencedirect.com/science/article/abs/pii/S0031320312004736?via%3Dihub) there are a lot of focus measures that could be easy to implement. Despite they're probably not very good for IQA, at least they can be used to compute some interesting measures.
@@ -79,6 +88,8 @@ In [Analysis of focus measure operators in shape-from-focus (Pertuz et al., 2012
 - Image contrast (`MIS3` in the paper), which was originally proposed in [Practical calibrations for a real-time digital omnidirectional camera (Nanda and Cutler, 2001)](https://www.researchgate.net/profile/Ross-Cutler/publication/228952354_Practical_calibrations_for_a_real-time_digital_omnidirectional_camera/links/09e4150bc3a55d3861000000/Practical-calibrations-for-a-real-time-digital-omnidirectional-camera.pdf). I've called it `NandaCutlerContrast`.
 - Helmli and Scherer's mean method for contrast (`MIS5`), proposed in [Adaptive shape from focus with an error estimation in light microscopy (Helmli and Scherer, 2001)](https://ieeexplore.ieee.org/document/938626). I've called it `MeanMethodFocus`.
 - Variance of Laplacian (`LAP4`). I used the same method as in this [Pyimagesearch post](https://pyimagesearch.com/2015/09/07/blur-detection-with-opencv/). The original measure was proposed in [Diatom autofocusing in brightfield microscopy: a comparative study (Pacheco et al., 2000)](https://ieeexplore.ieee.org/document/903548).
+- Tenengrad focus measure (`GRA6`)
+- Tenengrad variance (`GRA7`)
 
 #### Difference of differences
 

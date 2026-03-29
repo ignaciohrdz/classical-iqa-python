@@ -1,4 +1,5 @@
 import numpy as np
+import cv2
 
 
 def zca_whitening(x, epsilon=1e-6):
@@ -26,3 +27,10 @@ def zca_whitening(x, epsilon=1e-6):
     x_white = np.float16(x_white)
 
     return x_white.T
+
+
+def sobel_gradient_magnitude(x_gray, ksize=3):
+    sobelx = cv2.Sobel(x_gray / 255.0, cv2.CV_64F, 1, 0, ksize=ksize)
+    sobely = cv2.Sobel(x_gray / 255.0, cv2.CV_64F, 0, 1, ksize=ksize)
+    grad_mag = np.sqrt(np.abs(sobelx) ** 2 + np.abs(sobely) ** 2)
+    return grad_mag

@@ -1171,3 +1171,12 @@ class SOM:
         ftrs = np.array(ftrs)
 
         return ftrs
+
+
+codebook_models_dict = {
+    "lfa": LFA,
+    "cbiq": CBIQ,
+    "cornia": CORNIA,
+    "hosa": HOSA,
+    "som": SOM,
+}

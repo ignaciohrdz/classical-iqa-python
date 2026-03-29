@@ -558,3 +558,9 @@ class ENIQA:
         ftrs = self.extract_features(x_color)
 
         return ftrs
+
+
+entropy_models_dict = {
+    "sseq": SSEQ,
+    "eniqa": ENIQA,
+}

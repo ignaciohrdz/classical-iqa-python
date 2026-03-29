@@ -2,5 +2,6 @@ __pycache__
 /.vscode/
 /.idea/
 /classiqa/models/
+classiqa/tmp/
 /papers/
 iqa_datasets

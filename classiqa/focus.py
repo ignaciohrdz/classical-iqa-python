@@ -2,9 +2,12 @@
 
 from skimage.measure import blur_effect
 from classiqa.model import BaseModel, PatchModel
+from classiqa.processing import sobel_gradient_magnitude
+from classiqa.saliency import CovSal
 import cv2
 import numpy as np
 import torch
+from juliacall import Main as jl
 
 
 class BlurEffect(BaseModel):
@@ -205,6 +208,110 @@ class DeltaDifferences(BaseModel):
         return features
 
 
+class TenengradFocus(BaseModel):
+    """
+    As described in 'Diatom autofocusing in hrightfield microscopy: a comparative study' (Pacheco et al., 2000)
+    """
+
+    def __init__(self, img_size=512, sobel_size=3):
+        super().__init__(img_size, 1)
+        self.sobel_size = sobel_size
+
+    def extract_features(self, x_gray):
+        """Computes the magnitude of the Sobel gradients"""
+        grad_mag = sobel_gradient_magnitude(x_gray, ksize=self.sobel_size)
+        features = [(grad_mag**2).sum()]
+        return features
+
+
+class VarianceOfTenengrad(BaseModel):
+    """
+    As described in 'Diatom autofocusing in brightfield microscopy: a comparative study' (Pacheco et al., 2000)
+    """
+
+    def __init__(self, img_size=512, sobel_size=3):
+        super().__init__(img_size, 1)
+        self.sobel_size = sobel_size
+
+    def extract_features(self, x_gray):
+        """Computes the magnitude of the Sobel gradients"""
+        grad_mag = sobel_gradient_magnitude(x_gray, ksize=self.sobel_size)
+        mean_sobel = grad_mag.mean()
+        features = [((grad_mag - mean_sobel) ** 2).sum()]
+        return features
+
+
+class GPSQ(BaseModel):
+    """Quality assessment for real out-of-focus blurred images (Liu et al., 2017)
+    https://www.sciencedirect.com/science/article/abs/pii/S1047320317300676
+
+    I will be using the ImagePhaseCongruency Julia package by Peter Kovesi
+    https://peterkovesi.github.io/ImagePhaseCongruency.jl/dev/
+    """
+
+    def __init__(self, img_size, pct_pooling=20, use_color=True):
+        super().__init__(img_size, 1, bgr_input=True)
+        jl.Pkg.add("ImagePhaseCongruency")
+        jl.seval("using ImagePhaseCongruency")
+        self.prewitt = (1 / 3) * np.array([[1, 1, 1], [0, 0, 0], [-1, -1, -1]])
+        self.covsal = CovSal(sigma_points=True, center_bias=True)
+        self.pct_pooling = pct_pooling
+        self.use_color = use_color
+
+    def _prewitt(self, x_gray):
+        grad_x = cv2.filter2D(x_gray, -1, self.prewitt)
+        grad_y = cv2.filter2D(x_gray, -1, self.prewitt.T)
+        grad_mag = np.sqrt(np.abs(grad_x) ** 2 + np.abs(grad_y) ** 2)
+        grad_mag = (grad_mag / grad_mag.max()).astype(float)
+        return grad_mag
+
+    def extract_features(self, x):
+
+        # Compute gradient magnitude
+        x_gray = cv2.cvtColor(x, cv2.COLOR_BGR2GRAY)
+        grad_mag = self._prewitt(x_gray)
+
+        # Compute phase congruency
+        phase_cong, _, _, _ = jl.phasecongmono(x_gray)
+        phase_cong = np.array(phase_cong)
+
+        # cv2.imshow("Gradient", grad_mag)
+        # cv2.imshow("PhaseCong", phase_cong)
+        # cv2.waitKey()
+
+        # Localised structure map (S)
+        s = np.max(np.stack([grad_mag, phase_cong], axis=-1), -1)
+
+        if self.use_color:
+            # Convert to the YIQ color space
+            rgb2yiq = np.array(
+                [
+                    [0.299, 0.587, 0.114],
+                    [0.596, -0.274, -0.322],
+                    [0.211, -0.523, 0.312],
+                ],
+                dtype=float,
+            )
+            x_rgb = x.reshape(-1, 3)[:, ::-1]
+            x_yiq = np.matmul(x_rgb, rgb2yiq.T).reshape(x.shape)
+            _, x_i, x_q = cv2.split(x_yiq)
+            grad_mag_i = self._prewitt(x_i)
+            grad_mag_q = self._prewitt(x_q)
+            s = np.max(np.stack([s, grad_mag_i, grad_mag_q], axis=-1), -1)
+
+        # The authors compute saliency map using CovSal
+        # (warning: it's a very slow method)
+        sal_map = self.covsal.compute(x)
+        # sal_map /= sal_map.sum()
+
+        s = np.sort((sal_map * s).reshape(-1))[::-1]
+        n = len(s)
+        gpsq_idx = np.sqrt(np.sum(s[: self.pct_pooling] ** 2) / n)
+
+        features = [gpsq_idx]
+        return features
+
+
 # TODO: Implement the S3 measure:
 # Use this repo: https://github.com/Xiaoming-Zhao/s3_sharpness_measure
 
@@ -216,4 +323,7 @@ focus_models_dict = {
     "nanda_cutler": NandaCutlerContrast,
     "mean_method": MeanMethodFocus,
     "dom": DeltaDifferences,
+    "tenengrad": TenengradFocus,
+    "var_tenengrad": VarianceOfTenengrad,
+    "gpsq": GPSQ,
 }
