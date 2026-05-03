@@ -11,10 +11,9 @@ random.seed(420)
 
 
 class BaseModel:
-    """A wrapper for Scikit-image's blur_effect
-
-    See: https://scikit-image.org/docs/stable/auto_examples/filters/plot_blur_effect.html
-    """
+    """A basic template for all IQA models. It just does basic image preprocessing
+    and defines the basic workflow for feature database generation, which is needed
+    to train the score regressor later"""
 
     def __init__(self, img_size, n_features, bgr_input=False):
 
@@ -40,7 +39,10 @@ class BaseModel:
         return x
 
     def extract_features(self, x):
-        """This function should return the features"""
+        """This function should return the features, and the first step
+        should always be prepare_input"""
+
+        x_gray = self.prepare_input(x)
         features = [np.zeros(self.n_features)]
         return features
 
@@ -49,6 +51,7 @@ class BaseModel:
         :param dset: a DataFrame with columns [image_name, image_path, score, [img_set]]
                     (not all datasets have the img_set columns, only those that contain
                       groups of distorted images created from the same pristine source)
+        :param test_size: percentage of images for the test set
         """
 
         # Creating the train/test splits
@@ -64,8 +67,7 @@ class BaseModel:
             im_split = row["is_test"]
             print(f"[{i+1}/{len(dset)}]: Processing {im_name}")
             img = cv2.imread(im_path)
-            img_gray = self.prepare_input(img)
-            ftrs = list(self.extract_features(img_gray))
+            ftrs = list(self.extract_features(img))
             feature_db.append([im_name] + ftrs + [im_score, im_split, im_set])
 
         feature_cols = list(range(1, self.n_features + 1))
@@ -75,8 +77,7 @@ class BaseModel:
         return feature_db
 
     def __call__(self, x):
-        x_gray = self.prepare_input(x)
-        fts = self.extract_features(x_gray)
+        fts = self.extract_features(x)
         features = np.array(fts)
 
         return features
@@ -89,7 +90,7 @@ class BaseModel:
 
 
 class PatchModel(BaseModel):
-    """This model assumes the metric is computed in patches of patch_size x patch_size,
+    """This model assumes the metric uses patches of patch_size x patch_size,
     so it ensures that all inputs can be safely divided into patches of such size"""
 
     def __init__(self, img_size, n_features, patch_size):
@@ -100,7 +101,7 @@ class PatchModel(BaseModel):
         """We make sure the image is divisible into NxN tiles (N = patch_size)
         If the image is not divisible, we crop it
         starting from the top-left corner"""
-        h, w = x.shape
+        h, w = x.shape[:2]
         h_cropped = h - (h % self.patch_size)
         w_cropped = w - (w % self.patch_size)
         return x[:h_cropped, :w_cropped]

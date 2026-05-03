@@ -6,8 +6,11 @@ from classiqa.processing import sobel_gradient_magnitude
 from classiqa.saliency import CovSal
 import cv2
 import numpy as np
-import torch
+
+# This must be imported before PyTorch to avoid a segfault
 from juliacall import Main as jl
+
+import torch
 
 
 class BlurEffect(BaseModel):

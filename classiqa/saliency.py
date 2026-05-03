@@ -7,6 +7,37 @@ import numpy as np
 import cv2
 
 
+def spectral_residual_saliency(x_gray, gauss_ksize=11, sigma=2.5, epsilon=1e-6):
+    """Saliency Detection: A Spectral Residual Approach
+    http://www.houxiaodi.com/assets/papers/cvpr07.pdf
+    (This is the method used in ENIQA)"""
+
+    spec = np.fft.fft2(x_gray)
+    spec[spec == 0] = epsilon
+    mag_spec = np.log(np.abs(spec))
+    phase = np.angle(spec)
+
+    res_spec = mag_spec - cv2.blur(mag_spec, (3, 3))
+    saliency_fft = np.fft.ifft2(np.exp(res_spec + 1j * phase))
+    saliency = np.abs(saliency_fft) ** 2
+
+    # Post-processing (as in their MATLAB code)
+    saliency = cv2.GaussianBlur(
+        saliency,
+        ksize=(gauss_ksize, gauss_ksize),
+        sigmaX=sigma,
+        sigmaY=sigma,
+    )
+
+    # For visualization
+    # saliency_norm = (saliency - saliency.min()) / (saliency.max() - saliency.min())
+    # cv2.imshow("Image", x_gray)
+    # cv2.imshow("Saliency", saliency_norm)
+    # cv2.waitKey()
+
+    return saliency
+
+
 class CovSal:
     """Covariance Saliency method by Erdem and Erdem, 2013:
     https://web.cs.hacettepe.edu.tr/~erkut/projects/CovSal/

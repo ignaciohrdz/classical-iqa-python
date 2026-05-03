@@ -2,14 +2,13 @@ import cv2
 import torch
 from torch import nn
 import numpy as np
-import pandas as pd
 from scipy.stats import skew
-from .data import split_dataset
-import pickle
+from .model import PatchModel
+from .saliency import spectral_residual_saliency
 from itertools import combinations
 
 
-class SSEQ:
+class SSEQ(PatchModel):
     """Spatial-Spectral Entropy-based Quality (SSEQ) index (Liu et al.)"""
 
     def __init__(
@@ -20,40 +19,16 @@ class SSEQ:
         scales=3,
         eps=1e-5,
     ):
-        self.block_size = block_size
         self.img_size = img_size
         self.percentile = percentile
         self.scales = scales
         self.eps = eps
-        self.unfold = nn.Unfold(kernel_size=self.block_size, stride=self.block_size)
+        self.unfold = nn.Unfold(kernel_size=block_size, stride=block_size)
         self.n_features = self.scales * 4
+        super().__init__(img_size, self.n_features, block_size)
 
         self.m = self.make_dct_matrix()
         self.m_t = self.m.T
-
-    def crop_input(self, x):
-        """We make sure the image is divisible into NxN tiles (N = block_size)
-        If the image is not divisible, we crop it start from the top-left corner"""
-        h, w = x.shape
-        h_cropped = h - (h % self.block_size)
-        w_cropped = w - (w % self.block_size)
-        return x[:h_cropped, :w_cropped]
-
-    def prepare_input(self, x):
-        """Initial conversion to grayscale and resizing"""
-
-        x_gray = cv2.cvtColor(x, cv2.COLOR_BGR2GRAY)
-        x_gray = self.crop_input(x_gray)
-        if self.img_size > 0:
-            ratio = self.img_size / max(x_gray.shape)
-            x_gray = cv2.resize(
-                x_gray,
-                None,
-                fx=ratio,
-                fy=ratio,
-                interpolation=cv2.INTER_CUBIC,
-            )
-        return x_gray
 
     def __call__(self, x):
         # Initial resizing
@@ -84,7 +59,7 @@ class SSEQ:
             # Using Pytorch for extracting local image patches
             t = torch.from_numpy(x).unsqueeze(0).unsqueeze(0).float()
             t = self.unfold(t).permute(0, 2, 1).squeeze()
-            t = t.view(t.shape[0], self.block_size, self.block_size)
+            t = t.view(t.shape[0], self.patch_size, self.patch_size)
 
             # Spatial entropy
             # In order to compute it faster, I will use offsetting
@@ -123,14 +98,14 @@ class SSEQ:
 
     def make_dct_matrix(self):
         """DCT can be computed as a matrix multiplication"""
-        m = np.zeros((self.block_size, self.block_size), dtype=np.float32)
+        m = np.zeros((self.patch_size, self.patch_size), dtype=np.float32)
 
-        m[0, :] = np.sqrt(1 / self.block_size)
-        for row in range(1, self.block_size):
-            for col in range(self.block_size):
-                k = np.sqrt(2 / self.block_size)
+        m[0, :] = np.sqrt(1 / self.patch_size)
+        for row in range(1, self.patch_size):
+            for col in range(self.patch_size):
+                k = np.sqrt(2 / self.patch_size)
                 m[row, col] = k * (
-                    np.cos((np.pi * (2 * col + 1) * row) / (2 * self.block_size))
+                    np.cos((np.pi * (2 * col + 1) * row) / (2 * self.patch_size))
                 )
 
         return m
@@ -142,45 +117,8 @@ class SSEQ:
         end = int(x_size - x_size * 0.5 * (1 - self.percentile))
         return x[start:end]
 
-    def generate_feature_db(self, dset, test_size=0.3):
-        """Creates the feature database that will be used to fit the regressor
-        :param dset: a DataFrame with columns [image_name, image_path, score, [img_set]]
-                    (not all datasets have the img_set columns, only those that contain
-                      groups of distorted images created from the same pristine source)
-        :param test_size: percentage of images for the test set
-        """
 
-        # Creating the train/test splits
-        if "is_test" not in dset.columns:
-            dset = split_dataset(dset, test_size)
-
-        feature_db = []
-        for i, row in enumerate(dset.to_dict("records")):
-            im_name = row["image_name"]
-            im_path = row["image_path"]
-            im_set = row["image_set"]
-            im_score = row["score"]
-            im_split = row["is_test"]
-            print(f"[{i+1}/{len(dset)}]: Processing {im_name}")
-            img = cv2.imread(im_path)
-            img_gray = self.prepare_input(img)
-            ftrs = list(self.extract_features(img_gray))
-            feature_db.append([im_name] + ftrs + [im_score, im_split, im_set])
-
-        feature_cols = list(range(1, self.n_features + 1))
-        db_cols = ["image_name"] + feature_cols + ["MOS", "is_test", "image_set"]
-        feature_db = pd.DataFrame(feature_db, columns=db_cols)
-
-        return feature_db
-
-    def export(self, path_save):
-        path_pkl = path_save / "feature_extractor.pkl"
-        print("Saving feature extractor to ", str(path_pkl))
-        with open(path_pkl, "wb") as f:
-            pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)
-
-
-class ENIQA:
+class ENIQA(PatchModel):
     """Entropy-based No-reference IQA (ENIQA) by Chen et al."""
 
     def __init__(
@@ -227,16 +165,10 @@ class ENIQA:
         # This will have to be calculated once we have everything ready
         self.n_features = 28 * len(self.scales)
 
-    def crop_input(self, x_color):
-        """We make sure the image is divisible into NxN tiles (N = block_size)
-        If the image is not divisible, we crop it start from the top-left corner"""
-        h, w = x_color.shape[:2]
-        h_cropped = h - (h % self.block_size)
-        w_cropped = w - (w % self.block_size)
-        return x_color[:h_cropped, :w_cropped]
+        super().__init__(img_size, self.n_features, block_size)
 
     def prepare_input(self, x, img_size=None):
-        """Initial conversion to grayscale and resizing"""
+        """ENIQA requires an RGB and grayscale image"""
 
         x_color = self.crop_input(x)
 
@@ -256,35 +188,6 @@ class ENIQA:
         x_gray = cv2.cvtColor(x_color, cv2.COLOR_BGR2GRAY)
 
         return x_color, x_gray
-
-    def compute_saliency(self, x_gray):
-        # Salciency Detection: A Spectral Residual Approach
-        # http://www.houxiaodi.com/assets/papers/cvpr07.pdf
-        # (This is the method used in ENIQA)
-        spec = np.fft.fft2(x_gray)
-        spec[spec == 0] = self.epsilon
-        mag_spec = np.log(np.abs(spec))
-        phase = np.angle(spec)
-
-        res_spec = mag_spec - cv2.blur(mag_spec, (3, 3))
-        saliency_fft = np.fft.ifft2(np.exp(res_spec + 1j * phase))
-        saliency = np.abs(saliency_fft) ** 2
-
-        # Post-processing (as in their MATLAB code)
-        saliency = cv2.GaussianBlur(
-            saliency,
-            ksize=(self.saliency_gauss_ksize, self.saliency_gauss_ksize),
-            sigmaX=self.saliency_sigma,
-            sigmaY=self.saliency_sigma,
-        )
-
-        # For visualization
-        # saliency_norm = (saliency - saliency.min()) / (saliency.max() - saliency.min())
-        # cv2.imshow("Image", x_gray)
-        # cv2.imshow("Saliency", saliency_norm)
-        # cv2.waitKey()
-
-        return saliency
 
     def make_log_gabor_filters(self, img):
         """Create the log-Gabor filters (almost identical to the original repo)"""
@@ -426,7 +329,12 @@ class ENIQA:
         scale_ftrs["group_1"] = [mi_bg, mi_br, mi_gr]
 
         # Before moving on, we compute saliency from the grayscale image
-        saliency = self.compute_saliency(x_gray)
+        saliency = spectral_residual_saliency(
+            x_gray,
+            gauss_ksize=self.saliency_gauss_ksize,
+            sigma=self.saliency_sigma,
+            epsilon=self.epsilon,
+        )
         t_saliency = torch.from_numpy(saliency).unsqueeze(0).unsqueeze(0).float()
         t_saliency = self.unfold(t_saliency).permute(0, 2, 1).squeeze()
         t_saliency = t_saliency.sum(axis=1).numpy()
@@ -487,6 +395,8 @@ class ENIQA:
 
         return scale_ftrs
 
+    # TODO: Compare the features with the ones provided by the authors:
+    #   https://github.com/jacob6/ENIQA/tree/master/ENIQA_release/data
     def extract_features(self, x):
         # The features must be extracted at several scales
         scale_dicts = []
@@ -509,45 +419,6 @@ class ENIQA:
         features = np.array(features, dtype=np.float32)
 
         return features
-
-    def generate_feature_db(self, dset, test_size=0.3):
-        """Creates the feature database that will be used to fit the regressor
-        :param dset: a DataFrame with columns [image_name, image_path, score, [img_set]]
-                    (not all datasets have the img_set columns, only those that contain
-                      groups of distorted images created from the same pristine source)
-        :param test_size: percentage of images for the test set
-        """
-
-        # Creating the train/test splits
-        if "is_test" not in dset.columns:
-            dset = split_dataset(dset, test_size)
-
-        # TODO: Compare the features with the ones provided by the authors:
-        #   https://github.com/jacob6/ENIQA/tree/master/ENIQA_release/data
-
-        feature_db = []
-        for i, row in enumerate(dset.to_dict("records")):
-            im_name = row["image_name"]
-            im_path = row["image_path"]
-            im_set = row["image_set"]
-            im_score = row["score"]
-            im_split = row["is_test"]
-            print(f"[{i+1}/{len(dset)}]: Processing {im_name}")
-            img = cv2.imread(im_path)
-            ftrs = list(self.extract_features(img))
-            feature_db.append([im_name] + ftrs + [im_score, im_split, im_set])
-
-        feature_cols = list(range(1, self.n_features + 1))
-        db_cols = ["image_name"] + feature_cols + ["MOS", "is_test", "image_set"]
-        feature_db = pd.DataFrame(feature_db, columns=db_cols)
-
-        return feature_db
-
-    def export(self, path_save):
-        path_pkl = path_save / "feature_extractor.pkl"
-        print("Saving feature extractor to ", str(path_pkl))
-        with open(path_pkl, "wb") as f:
-            pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)
 
     def __call__(self, x):
 
