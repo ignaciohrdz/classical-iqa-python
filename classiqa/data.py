@@ -33,11 +33,9 @@ def split_dataset(dset, test_size=0.2):
     return dset
 
 
-# TODO: Add URLs and explain the user how to download the datasets
-
-
 def prepare_koniq(path_koniq: Path):
-    """Prepares the KonIQ-10k dataset for training"""
+    """Prepares the KonIQ-10k dataset for training
+    The dataset is here: https://database.mmsp-kn.de/koniq-10k-database.html"""
     path_images = path_koniq / "1024x768"
     path_scores = path_koniq / "koniq10k_scores_and_distributions.csv"
     dataset = pd.read_csv(path_scores)
@@ -47,7 +45,8 @@ def prepare_koniq(path_koniq: Path):
 
 
 def prepare_kadid(path_kadid: Path):
-    """Prepares the KADID-10k dataset for training"""
+    """Prepares the KADID-10k dataset for training
+    The dataset is here: https://database.mmsp-kn.de/kadid-10k-database.html"""
     path_images = path_kadid / "images"
     path_scores = path_kadid / "dmos.csv"
     dataset = pd.read_csv(path_scores)
@@ -57,7 +56,8 @@ def prepare_kadid(path_kadid: Path):
 
 
 def prepare_csiq(path_csiq: Path):
-    """Prepares the CSIQ dataset for training"""
+    """Prepares the CSIQ dataset for training
+    The dataset is here: https://s2.smu.edu/~eclarson/csiq.html"""
     path_distorted_images = path_csiq / "dst_imgs"
     path_scores = path_csiq / "csiq.DMOS.xlsx"
     dataset = pd.read_excel(path_scores, sheet_name="all_by_image")
@@ -173,8 +173,40 @@ def prepare_csiq_cornia(path_csiq: Path):
     return dataset
 
 
+def prepare_cid(path_cid: Path):
+    """Prepares the CID2013 dataset for training
+    The dataset is here: https://qualinet.github.io/databases/image/cid2013_camera_image_database/
+    """
+    path_scores = path_cid / "CID2013 data - version 12112014.xlsx"
+    image_sets = {
+        "I": "IS1",
+        "II": "IS2",
+        "III": "IS3",
+        "IV": "IS4",
+        "V": "IS5",
+        "VI": "IS6",
+    }
+
+    def get_image_path(image_name):
+        parts = image_name.split("_")
+        img_set = image_sets[parts[1]]
+        cluster_id = f"co{parts[2][-1]}"
+        img_path = path_cid / img_set / cluster_id / image_name
+        return img_path, f"{img_set}_{cluster_id}"
+
+    dataset = pd.read_excel(path_scores, sheet_name="CID2013 MOS")
+    dataset.rename(columns={"Realigned MOS": "score"}, inplace=True)
+    dataset["image_name"] = dataset["Source_ID"] + ".jpg"
+    dataset[["image_path", "image_set"]] = dataset["image_name"].apply(
+        lambda x: pd.Series(get_image_path(x))
+    )
+    return dataset.loc[:, ["image_path", "image_name", "score", "image_set"]]
+
+
 def prepare_tid(path_tid: Path):
-    """Prepares the TID2013 dataset for training"""
+    """Prepares the TID2013 dataset for training
+    The dataset is here: https://qualinet.github.io/databases/image/tampere_image_database_tid2013/
+    """
     path_images = path_tid / "distorted_images"
     path_scores = path_tid / "mos_with_names.txt"
     dataset = pd.read_csv(path_scores, names=["score", "image_name"], sep=" ")
@@ -186,7 +218,9 @@ def prepare_tid(path_tid: Path):
 
 
 def prepare_liveiqa(path_liveiqa: Path):
-    """Prepares the LIVE-IQA dataset (database release 2) for training"""
+    """Prepares the LIVE-IQA dataset (database release 2) for training
+    The dataset is here: https://qualinet.github.io/databases/image/live_image_quality_assessment_database/
+    """
     # Loading the MATLAB file
     path_dataset = path_liveiqa / "databaserelease2"
     path_scores = path_dataset / "dmos.mat"
@@ -235,7 +269,9 @@ def prepare_liveiqa(path_liveiqa: Path):
 
 
 def prepare_nitsiqa(path_nitsiqa):
-    """Prepares the NITSIQA dataset for training"""
+    """Prepares the NITSIQA dataset for training
+    The dataset is here: https://drive.google.com/drive/folders/0B_bnn8Xh3PMmT1VxSlVRWDNCTk0?resourcekey=0-9JzjQxVUNJXIodLwkiZ-Lg&usp=sharing
+    """
     col_changes = {
         "Distorted Image Name": "image_name",
         "Score": "score",
@@ -256,7 +292,8 @@ def prepare_nitsiqa(path_nitsiqa):
 
 
 def prepare_cidiq(path_cidiq):
-    """Prepares the CID:IQ dataset for training"""
+    """Prepares the CID:IQ dataset for training
+    The dataset is here: https://zenodo.org/records/17376246)"""
     path_scores = path_cidiq / "MOS50.mat"
     path_dataset = path_cidiq / "Images" / "Reproduction"
 
@@ -283,7 +320,6 @@ def prepare_cidiq(path_cidiq):
     return cidiq_data
 
 
-# TODO: Get the CID2013 dataset
 # TODO: Get the SPAQ dataset
 
 
@@ -294,6 +330,7 @@ dataset_fn_dict = {
     "csiq": prepare_csiq,
     "csiq+": prepare_csiq_cornia,
     "tid2013": prepare_tid,
+    "cid2013": prepare_cid,
     "liveiqa": prepare_liveiqa,
     "nitsiqa": prepare_nitsiqa,
 }

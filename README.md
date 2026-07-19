@@ -111,6 +111,7 @@ I'm using the following datasets:
 - [NITSIQA](https://drive.google.com/drive/folders/0B_bnn8Xh3PMmT1VxSlVRWDNCTk0?resourcekey=0-9JzjQxVUNJXIodLwkiZ-Lg&usp=sharing)
 - [LIVE-IQA](https://qualinet.github.io/databases/image/live_image_quality_assessment_database/)
 - [TID2013](https://qualinet.github.io/databases/image/tampere_image_database_tid2013/)
+- [CID2013](https://qualinet.github.io/databases/image/cid2013_camera_image_database/)
 - [CSIQ](https://qualinet.github.io/databases/image/categorical_image_quality_csiq_database/)
 - [CID:IQ](https://folk.ntnu.no/mariupe/CIDIQ.zip)
 
