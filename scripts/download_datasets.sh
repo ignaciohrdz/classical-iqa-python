@@ -71,6 +71,6 @@ rm ${DATASETS_DIR}/cidiq.7z
 # http://live.ece.utexas.edu/research/quality/subjective.htm
 
 mkdir -p ${DATASETS_DIR}/live-iqa/
-wget -O ${DATASETS_DIR}/live-iqa/dmos_realigned.mat "http://live.ece.utexas.edu/research/quality/release2/dmos_realigned.mat"
+wget -O ${DATASETS_DIR}/live-iqa/dmos_realigned.mat "http://live.ece.utexas.edu/research/Quality/release2/dmos_realigned.mat"
 
 
