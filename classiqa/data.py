@@ -36,8 +36,8 @@ def split_dataset(dset, test_size=0.2):
 def prepare_koniq(path_koniq: Path):
     """Prepares the KonIQ-10k dataset for training
     The dataset is here: https://database.mmsp-kn.de/koniq-10k-database.html"""
-    path_images = path_koniq / "1024x768"
-    path_scores = path_koniq / "koniq10k_scores_and_distributions.csv"
+    path_images = path_koniq / "images" / "512x384"
+    path_scores = path_koniq / "data" / "koniq10k_scores_and_distributions.csv"
     dataset = pd.read_csv(path_scores)
     dataset.rename(columns={"MOS": "score"}, inplace=True)
     dataset["image_path"] = dataset["image_name"].apply(lambda x: str(path_images / x))
@@ -58,8 +58,8 @@ def prepare_kadid(path_kadid: Path):
 def prepare_csiq(path_csiq: Path):
     """Prepares the CSIQ dataset for training
     The dataset is here: https://s2.smu.edu/~eclarson/csiq.html"""
-    path_distorted_images = path_csiq / "dst_imgs"
-    path_scores = path_csiq / "csiq.DMOS.xlsx"
+    path_distorted_images = path_csiq / "images" / "dst_imgs"
+    path_scores = path_csiq / "data" / "csiq.DMOS.xlsx"
     dataset = pd.read_excel(path_scores, sheet_name="all_by_image")
     dataset["image"] = dataset["image"].astype(str)
     dataset.set_index(["image", "dst_type", "dst_lev"], inplace=True)
@@ -91,8 +91,8 @@ def prepare_csiq_cornia(path_csiq: Path):
 
     # Expanding the dataset with more distortions
     extra_dataset = []
-    path_src = path_csiq / "src_imgs"
-    path_extension = path_csiq / "cornia_extension"
+    path_src = path_csiq / "images" / "src_imgs"
+    path_extension = path_csiq / "images"/ "cornia_extension"
 
     # Salt & pepper noise
     # Based on: https://stackoverflow.com/a/27342545
